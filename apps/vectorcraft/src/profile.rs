@@ -51,6 +51,11 @@ fn platform_dir(os: &str, legacy: bool, env: &impl Fn(&str) -> Option<OsString>)
     match os {
         "macos" => env("HOME").map(|p| PathBuf::from(p).join("Library/Application Support").join(name)),
         "windows" => env("APPDATA").map(|p| PathBuf::from(p).join(name)),
+        "android" => env("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .or_else(|| env("HOME").map(|p| PathBuf::from(p).join(".config")))
+            .map(|p| p.join(lower))
+            .or_else(|| (!legacy).then(|| env("EXTERNAL_STORAGE").map(|s| PathBuf::from(s).join("Android/data/ai.storyteller.vectorcraft/files"))).flatten()),
         _ => env("XDG_CONFIG_HOME").map(PathBuf::from).or_else(|| env("HOME").map(|p| PathBuf::from(p).join(".config"))).map(|p| p.join(lower)),
     }
 }

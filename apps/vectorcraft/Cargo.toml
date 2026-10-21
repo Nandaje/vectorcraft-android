@@ -6,6 +6,14 @@ license.workspace = true
 publish = false
 default-run = "vectorcraft"
 
+[lib]
+name = "vectorcraft"
+path = "src/lib.rs"
+
+[[bin]]
+name = "vectorcraft"
+path = "src/main.rs"
+
 [lints]
 workspace = true
 
@@ -20,22 +28,31 @@ windows7 = ["eframe/glow"]
 vectorcraft-engine = { workspace = true }
 vectorcraft-ui-egui = { workspace = true }
 vectorcraft-text = { workspace = true }
-eframe = { workspace = true, features = ["default_fonts", "wayland", "x11"] }
+eframe = { workspace = true, features = ["default_fonts"] }
 egui = { workspace = true }
 serde_json = { workspace = true }
 log = { workspace = true }
 
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+[target.'cfg(not(target_os = "android"))'.dependencies]
+eframe = { workspace = true, features = ["wayland", "x11"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+eframe = { workspace = true, features = ["android-native-activity"] }
+winit = { version = "0.30", default-features = false, features = ["android-native-activity"] }
+
+[target.'cfg(all(not(target_arch = "wasm32"), not(target_os = "android")))'.dependencies]
 rfd = { workspace = true }
 # wayland-data-control: native Wayland clipboard (Linux; X11 through XWayland only sees what X11 apps copied).
 arboard = { workspace = true, features = ["image-data", "wayland-data-control"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 image = { workspace = true }
 webbrowser = { workspace = true }
 # The window's monitors, size and position (the same winit eframe runs on).
 winit = { version = "0.30", default-features = false }
 
 # The win7 target retains the viewer fallback; craft-print's WinRT PDF renderer needs newer Windows.
-[target.'cfg(all(not(target_arch = "wasm32"), not(target_vendor = "win7")))'.dependencies]
+[target.'cfg(all(not(target_arch = "wasm32"), not(target_os = "android"), not(target_vendor = "win7")))'.dependencies]
 craft-print = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
