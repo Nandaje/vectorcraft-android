@@ -1,7 +1,7 @@
 //! Desktop printer transport. VectorCraft composes every page and copy before submission;
 //! craft-print owns discovery and spooling. Windows 7 keeps its viewer-based transport because
 //! Windows.Data.Pdf is unavailable there.
-#[cfg(not(all(windows, any(feature = "windows7", target_vendor = "win7"))))]
+#[cfg(not(any(target_os = "android", all(windows, any(feature = "windows7", target_vendor = "win7")))))]
 use std::process::Command;
 use vectorcraft_ui_egui::print::{PrintJob, PrintService, Printer};
 
@@ -24,14 +24,42 @@ impl PrintService for SystemPrint {
         Some(std::sync::Arc::new(|job| SystemPrint.print(job)))
     }
     fn has_setup(&self) -> bool {
-        true
+        !cfg!(target_os = "android")
     }
     fn setup(&mut self, printer: Option<&str>) -> Result<(), String> {
         system::setup(printer)
     }
 }
 
-#[cfg(not(all(windows, any(feature = "windows7", target_vendor = "win7"))))]
+#[cfg(target_os = "android")]
+mod system {
+    use super::*;
+
+    pub fn printers() -> Vec<Printer> {
+        vec![Printer { name: "Save as PDF (Documents/VectorCraft)".into(), default: true }]
+    }
+
+    pub fn print(job: &PrintJob) -> Result<String, String> {
+        let dir = crate::android::default_documents_dir();
+        let _ = std::fs::create_dir_all(&dir);
+        let stem: String = job
+            .title
+            .chars()
+            .map(|c| if matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') { '_' } else { c })
+            .collect();
+        let stem = if stem.trim().is_empty() { "Print" } else { stem.trim() };
+        let file_name = if stem.to_ascii_lowercase().ends_with(".pdf") { stem.to_string() } else { format!("{stem}.pdf") };
+        let path = dir.join(file_name);
+        vectorcraft_engine::cmd::fileio::write_atomic(&path, job.pdf).map_err(|e| e.to_string())?;
+        Ok(format!(" ({})", path.display()))
+    }
+
+    pub fn setup(_printer: Option<&str>) -> Result<(), String> {
+        Err("Printer setup is not available on Android".into())
+    }
+}
+
+#[cfg(not(any(target_os = "android", all(windows, any(feature = "windows7", target_vendor = "win7")))))]
 mod system {
     use super::*;
     pub fn printers() -> Vec<Printer> {
