@@ -1,0 +1,29 @@
+[package]
+name = "vectorcraft-android-apk"
+description = "VectorCraft Android NativeActivity shared library (libvectorcraft.so)"
+version = "0.13.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lib]
+name = "vectorcraft"
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+vectorcraft = { path = "../../../apps/vectorcraft", default-features = false, features = ["wgpu"] }
+log = "0.4"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+
+[workspace]
+
+[patch.crates-io]
+hayro-syntax = { git = "https://github.com/storytold/craft-libs", rev = "ca50d63b773c99f96e75c77ce5a1d21e7c9cda0d" }
+hayro-interpret = { git = "https://github.com/storytold/craft-libs", rev = "ca50d63b773c99f96e75c77ce5a1d21e7c9cda0d" }
+hayro-jbig2 = { git = "https://github.com/storytold/craft-libs", rev = "ca50d63b773c99f96e75c77ce5a1d21e7c9cda0d" }
+krilla = { git = "https://github.com/storytold/craft-libs", rev = "ca50d63b773c99f96e75c77ce5a1d21e7c9cda0d" }

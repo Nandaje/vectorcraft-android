@@ -23,7 +23,9 @@ use vectorcraft_ui_egui::SystemClipboard;
 pub fn system_clipboard() -> Box<dyn SystemClipboard> {
     #[cfg(windows)]
     let cb = Box::<win::Clipboard>::default();
-    #[cfg(not(windows))]
+    #[cfg(target_os = "android")]
+    let cb = Box::<android_clip::Clipboard>::default();
+    #[cfg(not(any(windows, target_os = "android")))]
     let cb = Box::<portable::Clipboard>::default();
     cb
 }
@@ -57,18 +59,22 @@ fn pasteboard_types(mime: &str) -> &'static [(&'static str, &'static str)] {
 }
 
 /// The text flavour among `flavours`.
+#[cfg_attr(target_os = "android", allow(dead_code))]
 fn text_of(flavours: &[Flavour]) -> Option<String> {
     flavours.iter().find(|f| f.mime == TEXT).map(|f| String::from_utf8_lossy(&f.data).into_owned())
 }
 
 /// Most pixels a side of a bitmap another app put on the clipboard (untrusted data).
+#[cfg_attr(target_os = "android", allow(dead_code))]
 const MAX_SIDE: u32 = 32_768;
 
+#[cfg_attr(target_os = "android", allow(dead_code))]
 fn decode_png(png: &[u8]) -> Option<image::RgbaImage> {
     Some(image::load_from_memory_with_format(png, image::ImageFormat::Png).ok()?.to_rgba8())
 }
 
 /// `img` as a PNG flavour.
+#[cfg_attr(target_os = "android", allow(dead_code))]
 fn png_flavour(img: &image::RgbaImage) -> Option<Flavour> {
     let mut data = vec![];
     img.write_to(&mut Cursor::new(&mut data), image::ImageFormat::Png).ok()?;
@@ -136,6 +142,7 @@ fn dib_image(dib: &[u8]) -> Option<image::RgbaImage> {
 
 /// The first of `paths` (files copied in a file manager) that pastes as one of `mimes`, read
 /// whole. Only its first bytes are read to tell, so other files cost little.
+#[cfg_attr(target_os = "android", allow(dead_code))]
 fn copied_file(paths: Vec<PathBuf>, mimes: &[&'static str]) -> Option<Flavour> {
     paths.into_iter().find_map(|path| {
         // text/uri-list lines end in CRLF (RFC 2483), but arboard splits them on LF only.
@@ -297,7 +304,8 @@ mod win {
     }
 }
 
-/// arboard: one format at a time. Built everywhere so it is checked everywhere.
+/// arboard: one format at a time. Built on desktop platforms so it is checked everywhere.
+#[cfg(not(target_os = "android"))]
 #[cfg_attr(windows, allow(dead_code))]
 mod portable {
     use std::borrow::Cow;
@@ -426,6 +434,40 @@ mod mac {
                 (!data.is_empty()).then_some(Flavour { mime, data })
             })
         })
+    }
+}
+
+/// Android in-process clipboard store (used alongside egui's internal clipboard when `arboard` is
+/// unavailable on `target_os = "android"`).
+#[cfg(target_os = "android")]
+mod android_clip {
+    use super::*;
+
+    #[derive(Default)]
+    pub struct Clipboard {
+        flavours: Vec<Flavour>,
+    }
+
+    impl SystemClipboard for Clipboard {
+        fn write(&mut self, flavours: &[Flavour]) -> Result<(), String> {
+            self.flavours = flavours.to_vec();
+            Ok(())
+        }
+
+        fn holds_ours(&mut self) -> bool {
+            !self.flavours.is_empty()
+        }
+
+        fn read(&mut self, mimes: &[&'static str]) -> Option<Flavour> {
+            mimes.iter().find_map(|&m| match m {
+                BITMAP => self.flavours.iter().find(|f| f.mime == PNG).cloned(),
+                _ => self.flavours.iter().find(|f| f.mime == m).cloned(),
+            })
+        }
+
+        fn has(&mut self, mimes: &[&'static str]) -> bool {
+            self.read(mimes).is_some()
+        }
     }
 }
 
