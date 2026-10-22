@@ -112,6 +112,79 @@ fn set_range_style_defaults_to_all_text_and_get_range() {
     assert_eq!(r["length"], json!(3));
 }
 
+/// The type commands refuse a number or an on/off option given as text or as another value of the
+/// wrong kind, naming the key, and leave the document and its undo history as they were; true,
+/// false, numbers and null still work.
+#[test]
+fn type_commands_refuse_a_number_or_boolean_given_as_text() {
+    use super::tests::{not_a_number, not_a_switch, not_refused};
+    let mut s = session();
+    let id = text(&mut s, "abc");
+    let frame = s.execute("shape.rectangle", &json!({"x": 300, "y": 300, "width": 100, "height": 50})).unwrap()["id"].clone();
+    let boxed = s.execute("text.create", &json!({"x": 0, "y": 300, "text": "a", "area": {"width": 100, "height": 50}})).unwrap()["id"].clone();
+    s.execute("select.set", &json!({"ids": [id.0]})).unwrap();
+    let area = json!({"x": 0, "y": 0, "text": "a", "area": {"width": "200", "height": 100}});
+    let mut calls = vec![("text.create".to_string(), area, "`width` must be a number, not \"200\"".to_string())];
+    let area = json!({"x": 0, "y": 0, "text": "a", "area": {"width": 200, "height": 100, "fit": "shrinkText", "fitMinPercent": "40"}});
+    calls.push(("text.create".to_string(), area, "`fitMinPercent` must be a number, not \"40\"".to_string()));
+    calls.extend(
+        [
+            ("text.create", json!({"x": 0, "y": 0, "text": "a", "size": "12"}), "size"),
+            ("text.createInPath", json!({"path": frame, "text": "a", "size": [12]}), "size"),
+            ("text.createInPath", json!({"path": frame, "mode": "area", "fitMinPercent": "40"}), "fitMinPercent"),
+            ("text.setRangeStyle", json!({"id": id.0, "size": "30"}), "size"),
+            ("text.setRangeStyle", json!({"id": id.0, "tracking": "50"}), "tracking"),
+            ("text.setRangeStyle", json!({"id": id.0, "hScale": true}), "hScale"),
+            ("text.setRangeStyle", json!({"id": id.0, "strokeWidth": "1"}), "strokeWidth"),
+            ("text.setRangeStyle", json!({"id": id.0, "start": "1", "size": 30}), "start"),
+            ("text.setRangeStyle", json!({"id": id.0, "end": [1], "size": 30}), "end"),
+            ("text.editRange", json!({"id": id.0, "start": 0, "end": "1", "insert": "x"}), "end"),
+            ("text.getRange", json!({"id": id.0, "start": "1"}), "start"),
+            ("text.touchType", json!({"id": id.0, "start": 0, "rotation": "10"}), "rotation"),
+            ("text.touchType", json!({"id": id.0, "start": "0", "rotation": 10}), "start"),
+            ("type.step", json!({"attribute": "size", "by": "2"}), "by"),
+            ("type.step", json!({"attribute": "size", "id": id.0, "start": "1"}), "start"),
+            ("type.size.increase", json!({"by": "2"}), "by"),
+            ("type.size.decrease", json!({"by": [2]}), "by"),
+            ("type.ruby", json!({"text": "a", "size": "60"}), "size"),
+            ("text.areaOptions", json!({"ids": [boxed], "width": "200"}), "width"),
+            ("text.areaOptions", json!({"ids": [boxed], "height": [80]}), "height"),
+            ("text.areaOptions", json!({"ids": [boxed], "fit": "shrinkText", "fitMinPercent": "40"}), "fitMinPercent"),
+        ]
+        .map(|(cmd, p, key)| not_a_number(cmd, p, key)),
+    );
+    calls.extend(
+        [
+            ("text.create", json!({"x": 0, "y": 0, "text": "a", "vertical": "true"}), "vertical"),
+            ("text.create", json!({"x": 0, "y": 0, "placeholder": 1}), "placeholder"),
+            ("text.createInPath", json!({"path": frame, "vertical": "true"}), "vertical"),
+            ("text.createInPath", json!({"path": frame, "placeholder": "true"}), "placeholder"),
+            ("text.setRangeStyle", json!({"id": id.0, "underline": "true"}), "underline"),
+            ("text.setRangeStyle", json!({"id": id.0, "allCaps": 1}), "allCaps"),
+            ("text.setRangeStyle", json!({"id": id.0, "noBreak": "true"}), "noBreak"),
+            ("text.setRangeStyle", json!({"id": id.0, "size": 30, "tateChuYoko": 1}), "tateChuYoko"),
+            ("text.getRange", json!({"id": id.0, "effective": "true"}), "effective"),
+            ("type.opticalMarginAlignment", json!({"on": "true"}), "on"),
+            ("type.systemLayout", json!({"on": "true"}), "on"),
+            ("type.fractionalWidths", json!({"on": "false"}), "on"),
+            ("type.ruby", json!({"remove": "true"}), "remove"),
+            ("type.ruby", json!({"text": "a", "overhang": "false"}), "overhang"),
+        ]
+        .map(|(cmd, p, key)| not_a_switch(cmd, p, key)),
+    );
+    let wrong = not_refused(&mut s, &calls);
+    assert!(wrong.is_empty(), "not refused: {wrong:#?}");
+    let style = json!({"id": id.0, "size": 30, "underline": true, "tracking": null, "start": null, "noBreak": true});
+    s.execute("text.setRangeStyle", &style).unwrap();
+    s.execute("type.size.increase", &json!({"by": null})).unwrap();
+    s.execute("type.opticalMarginAlignment", &json!({"on": true})).unwrap();
+    s.execute("type.ruby", &json!({"text": "a", "size": null, "overhang": false})).unwrap();
+    let t = obj(&s, id);
+    let st = &t.runs[0].style;
+    assert!(st.underline && st.no_break && t.optical_margin && st.size > 30.0, "{st:?}");
+    assert!(!t.ruby.is_empty() && t.ruby.iter().all(|r| !r.overhang && r.size_percent == 50.0), "{:?}", t.ruby);
+}
+
 /// Where each glyph of type object `id` is drawn from (its origin in font units), document space.
 fn glyph_pens(s: &Session, id: NodeId) -> Vec<(usize, Point)> {
     let t = obj(s, id);

@@ -947,6 +947,11 @@
 	Fidelity:	Fidelidade:
 	Figure Space	Espaço de Figura
 	Figure:	Figura:
+# Artwork drag between document tabs.
+	Drop Artwork	Soltar arte
+@msg	{key} must be [x, y] with finite coordinates	{key} deve ser [x, y] com coordenadas finitas
+@msg	ids must contain 1–10000 object ids	ids deve conter de 1 a 10000 IDs de objetos
+
 	File	Arquivo
 	File Format:	Formato do Arquivo:
 	File Formats	Formatos de Arquivo
@@ -1976,6 +1981,7 @@
 	Proof Setup	Configuração de Prova
 	Properties	Propriedades
 	Proportional Metrics	Métrica Proporcional
+	Character Direction	Direção de Caracteres
 	Digits	Dígitos
 	Arabic	Arábicos
 	Hindi	Hindi
@@ -3056,6 +3062,7 @@ imageTrace	Outline	Contorno
 	Activate Panel	Ativar Painel
 	Change Panel Layout	Alterar Layout dos Painéis
 	Close Panel	Fechar Painel
+	Collapse Panel Group	Recolher Grupo de Painéis
 	Move Panel	Mover Painel
 	Group with	Agrupar com
 	Resize panels	Redimensionar painéis
@@ -3562,7 +3569,7 @@ axis	Both	Ambos
 @msg	give the path `id` and the width point `index`	informe o `id` do traçado e o `index` do ponto de largura
 @msg	guides are locked	as guias estão bloqueadas
 @msg	handle must be in or out	handle deve ser in ou out
-@msg	image '{key}' has no pixels and was left out	a imagem '{key}' não tem pixels e foi omitida
+@msg	an image has no pixels and was left out	uma imagem sem pixels foi omitida
 @msg	image data `{_1}` is missing	os dados da imagem `{_1}` estão ausentes
 @msg	image would be too large; lower the resolution	a imagem ficaria grande demais; reduza a resolução
 @msg	index must be a number or first, previous, next or last	index deve ser um número ou first, previous, next ou last
@@ -4021,6 +4028,12 @@ axis	Both	Ambos
 @msg	before must name a panel	before deve nomear um painel
 @msg	docking action contains an unknown panel or an excessive split path	a ação de encaixe contém um painel desconhecido ou um caminho de divisão excessivo
 @msg	group must be true or false	group deve ser true ou false
+@msg	panel floats; collapse its group with window.panel.float {panel, collapsed}	o painel está flutuando; recolha o grupo com window.panel.float {panel, collapsed}
+@msg	panel is not in a dock group	o painel não está em um grupo do encaixe
+@msg	only a dock group above or below others collapses, not one beside another	só um grupo do encaixe acima ou abaixo de outros é recolhido, não um ao lado
+@msg	icon must be true or false	icon deve ser true ou false
+@msg	icon only docks a panel in the icon column, with no anchor	icon apenas encaixa um painel na coluna de ícones, sem anchor
+@msg	column docks a set as a dock column, with no anchor or icon	column encaixa um conjunto como coluna do encaixe, sem anchor nem icon
 @msg	move requires a destination panel	mover exige um painel de destino
 @msg	move requires an existing destination panel	mover exige um painel de destino existente
 @msg	onto must name a floating panel	onto deve nomear um painel flutuante
@@ -5191,6 +5204,8 @@ mark-style	Japanese	Japonesas
 	Sketch	Esboço
 	Halftone Pattern…	Padrão de meio-tom…
 	Halftone Pattern	Padrão de meio-tom
+	Torn Edges…	Bordas rasgadas…
+	Torn Edges	Bordas rasgadas
 	Pattern Type	Tipo de padrão
 	Dot	Ponto
 # User Interface › Color Scheme
@@ -5240,9 +5255,11 @@ mark-style	Japanese	Japonesas
 @msg	Persistent libraries not found: {files}	Bibliotecas persistentes não encontradas: {files}
 @msg	`{given}` isn't a library panel (see window.swatchLibrary)	`{given}` não é um painel de biblioteca (consulte window.swatchLibrary)
 @msg	library panel `{given}` isn't open	o painel de biblioteca `{given}` não está aberto
+@msg	library panel `{given}` isn't missing its library	a biblioteca do painel de biblioteca `{given}` não está faltando
 @msg	too many library panels were opened in this session	foram abertos painéis de biblioteca demais nesta sessão
 @msg	The image is {_1} × {_2} pixels, more than {LARGE_TRACE_SIDE} on a side: it is traced, but more slowly. A lower-fidelity preset or a smaller copy of the image traces faster.	A imagem tem {_1} × {_2} pixels, mais de {LARGE_TRACE_SIDE} em um lado: ela é traçada, mas mais devagar. Uma predefinição de menor fidelidade ou uma cópia menor da imagem traça mais rápido.
 @msg	The image was traced at {_1} × {_2} pixels, scaled down from {_3} × {_4} ({_5} megapixels at most).	A imagem foi traçada em {_1} × {_2} pixels, reduzida de {_3} × {_4} (no máximo {_5} megapixels).
+	Gap Length:	Comprimento da Lacuna:
 	Artboard {n} of {total}	Mesa de Trabalho {n} de {total}
 	Encoding and writing the file…	Codificando e gravando o arquivo…
 @plural	{n} more export waiting|{n} more exports waiting	Mais {n} exportação aguardando|Mais {n} exportações aguardando
@@ -5259,6 +5276,14 @@ mark-style	Japanese	Japonesas
 	Full Justify	Justificação Completa
 	Minimum must not exceed Desired, nor Desired Maximum.	O mínimo não pode passar do desejado, nem o desejado do máximo.
 	Justification	Justificação
+	Add filters from the list above	Adicione filtros da lista acima
+	Add to Stack	Adicionar à Pilha
+	Applied Filters	Filtros Aplicados
+	Categories	Categorias
+	Choose a filter	Escolha um filtro
+	Effect Gallery	Galeria de Efeitos
+	Filters	Filtros
+	Select artwork to apply effects	Selecione a arte para aplicar efeitos
 @msg	the file's variables and data sets weren't read (variables: {variables}, data sets: {data_sets}): the Variables panel doesn't list them	as variáveis e os conjuntos de dados do arquivo não foram lidos (variáveis: {variables}, conjuntos de dados: {data_sets}): o painel Variáveis não os lista
 # Select by Color (select.color)
 	Select by Color	Selecionar por Cor
@@ -5284,3 +5309,13 @@ mark-style	Japanese	Japonesas
 	Water Paper	Papel molhado
 	Ruby…	Ruby…
 	Ruby	Ruby
+	Ease In	Entrada suave
+	Ease Out	Saída suave
+	Ease In Out	Entrada e saída suaves
+	Ease Out In	Saída e entrada suaves
+	Ramp:	Intensidade:
+	Shift:	Deslocamento:
+	Fresco…	Afresco…
+	Fresco	Afresco
+	Effect Gallery…	Galeria de Efeitos…
+	Effect Gallery Dialog	Caixa de diálogo Galeria de Efeitos

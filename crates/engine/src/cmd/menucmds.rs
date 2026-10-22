@@ -353,6 +353,7 @@ fn transform_each_as(s: &mut Session, p: &Value, label: &str) -> Result<Value> {
     let random = switch_or(p, "random", false, "object.transformEach")?;
     let refi = whole_or(p, "reference", 4, "object.transformEach")?.min(8) as usize;
     let copy = switch_or(p, "copy", false, "object.transformEach")?;
+    check_switches(p, &["strokes", "corners", "objects", "patterns"], "object.transformEach")?;
     let objects = super::object::transforms_objects(p);
     if sh == 0.0 || sv == 0.0 {
         return Err(bad("object.transformEach", "scale must be non-zero"));
@@ -1018,6 +1019,7 @@ fn rearrange_artboards(s: &mut Session, p: &Value) -> Result<Value> {
     check_numbers(p, &["spacing"], CMD)?;
     let spacing = f64_or(p, "spacing", 20.0).clamp(-1.0e5, 1.0e5);
     let move_art = switch_or(p, "moveArtwork", true, CMD)?;
+    check_switches(p, &["patterns"], CMD)?;
     let locked_and_hidden = s.prefs.move_locked_with_artboard;
     let d = &s.doc()?.doc;
     let rects: Vec<Rect> = d.artboards.iter().map(|a| a.rect).collect();

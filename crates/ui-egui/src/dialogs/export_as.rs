@@ -142,6 +142,23 @@ fn confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
     app.ui.dialog = None;
     let path = io::target_path(app, None, f.extensions[0])?;
     let range = if all { "all".to_string() } else { range };
+    let r = options_or_write(app, f, plugin, path, use_artboards, all, range);
+    // The options follow the save panel: the Enter that closed it isn't theirs (as in Save As).
+    super::opened_by_panel(app);
+    r
+}
+
+/// After the save panel picked `path`: the options dialog of format `f` (or of its exporter
+/// plug-in), else the file written.
+fn options_or_write(
+    app: &mut VectorcraftApp,
+    f: &'static Format,
+    plugin: Option<std::sync::Arc<vectorcraft_plugins::Plugin>>,
+    path: String,
+    use_artboards: bool,
+    all: bool,
+    range: String,
+) -> Result<Value, String> {
     match f.id {
         "svg" | "svgz" => {
             svg_options::open(app, svg_options::Mode::Export, Some(&path));

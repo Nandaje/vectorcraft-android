@@ -1067,6 +1067,11 @@
 	Fidelity:	Точность:
 	Figure Space	Цифровая шпация
 	Figure:	Цифры:
+# Artwork drag between document tabs.
+	Drop Artwork	Поместить графику
+@msg	{key} must be [x, y] with finite coordinates	{key} должен быть [x, y] с конечными координатами
+@msg	ids must contain 1–10000 object ids	ids должен содержать от 1 до 10000 идентификаторов объектов
+
 	File	Файл
 	File Dimensions	Размеры файла
 	File Format:	Формат файла:
@@ -2421,6 +2426,7 @@ mark-style	Japanese	Японский
 	Proof Setup	Настройка цветопробы
 	Properties	Свойства
 	Proportional Metrics	Пропорциональные метрики
+	Character Direction	Направление символов
 	Digits	Цифры
 	Arabic	Арабские
 	Hindi	Хинди
@@ -4024,7 +4030,7 @@ axis	Both	Оба
 @msg	give the path `id` and the width point `index`	укажите `id` контура и `index` точки ширины
 @msg	guides are locked	направляющие заблокированы
 @msg	handle must be in or out	handle должен быть in или out
-@msg	image '{key}' has no pixels and was left out	изображение '{key}' не имеет пикселей и было пропущено
+@msg	an image has no pixels and was left out	изображение без пикселей пропущено
 @msg	image data `{_1}` is missing	данные изображения `{_1}` отсутствуют
 @msg	image would be too large; lower the resolution	изображение было бы слишком большим; уменьшите разрешение
 @msg	index must be a number or first, previous, next or last	index должен быть числом или first, previous, next, last
@@ -4595,6 +4601,7 @@ axis	Both	Оба
 	Activate Panel	Активировать панель
 	Change Panel Layout	Изменить расположение панелей
 	Close Panel	Закрыть панель
+	Collapse Panel Group	Свернуть группу панелей
 	Move Panel	Переместить панель
 	Group with	Сгруппировать с
 	Resize panels	Изменить размер панелей
@@ -4605,6 +4612,12 @@ axis	Both	Оба
 @msg	before must name a panel	before должен указывать панель
 @msg	docking action contains an unknown panel or an excessive split path	Действие прикрепления содержит неизвестную панель или слишком длинный путь разделений
 @msg	group must be true or false	group должен иметь значение true или false
+@msg	panel floats; collapse its group with window.panel.float {panel, collapsed}	панель плавающая; сверните её группу через window.panel.float {panel, collapsed}
+@msg	panel is not in a dock group	панель не находится в группе дока
+@msg	only a dock group above or below others collapses, not one beside another	свернуть можно только группу дока над или под другими, а не рядом с ними
+@msg	icon must be true or false	icon должен быть true или false
+@msg	icon only docks a panel in the icon column, with no anchor	icon только закрепляет панель в столбце значков, без anchor
+@msg	column docks a set as a dock column, with no anchor or icon	column закрепляет набор как столбец дока, без anchor и icon
 @msg	move requires a destination panel	Для перемещения требуется целевая панель
 @msg	move requires an existing destination panel	Для перемещения требуется существующая целевая панель
 @msg	onto must name a floating panel	onto должен указывать плавающую панель
@@ -4882,6 +4895,8 @@ lighting	Light	Свет
 	Sketch	Эскиз
 	Halftone Pattern…	Полутоновый узор…
 	Halftone Pattern	Полутоновый узор
+	Torn Edges…	Рваные края…
+	Torn Edges	Рваные края
 	Pattern Type	Тип узора
 	Dot	Точка
 # User Interface › Color Scheme
@@ -4933,9 +4948,11 @@ lighting	Light	Свет
 @msg	Persistent libraries not found: {files}	Постоянные библиотеки не найдены: {files}
 @msg	`{given}` isn't a library panel (see window.swatchLibrary)	`{given}` — не панель библиотеки (см. window.swatchLibrary)
 @msg	library panel `{given}` isn't open	панель библиотеки `{given}` не открыта
+@msg	library panel `{given}` isn't missing its library	библиотека панели библиотеки `{given}` не отсутствует
 @msg	too many library panels were opened in this session	в этом сеансе открыто слишком много панелей библиотек
 @msg	The image is {_1} × {_2} pixels, more than {LARGE_TRACE_SIDE} on a side: it is traced, but more slowly. A lower-fidelity preset or a smaller copy of the image traces faster.	Изображение {_1} × {_2} пикселей, больше {LARGE_TRACE_SIDE} по одной стороне: трассировка выполняется, но медленнее. Стиль с меньшей точностью или уменьшенная копия изображения трассируются быстрее.
 @msg	The image was traced at {_1} × {_2} pixels, scaled down from {_3} × {_4} ({_5} megapixels at most).	Изображение трассировано в размере {_1} × {_2} пикселей, уменьшенное с {_3} × {_4} (не более {_5} мегапикселей).
+	Gap Length:	Длина зазора:
 	Artboard {n} of {total}	Монтажная область {n} из {total}
 	Encoding and writing the file…	Кодирование и запись файла…
 @plural	{n} more export waiting|{n} more exports waiting	Ещё {n} экспорт в очереди|Ещё {n} экспорта в очереди|Ещё {n} экспортов в очереди
@@ -4953,6 +4970,14 @@ lighting	Light	Свет
 	Minimum must not exceed Desired, nor Desired Maximum.	Минимум не может превышать желательное значение, а желательное — максимум.
 	Minimum	Минимум
 	Justification	Выключка
+	Add filters from the list above	Добавьте фильтры из списка выше
+	Add to Stack	Добавить в стек
+	Applied Filters	Применённые фильтры
+	Categories	Категории
+	Choose a filter	Выберите фильтр
+	Effect Gallery	Галерея эффектов
+	Filters	Фильтры
+	Select artwork to apply effects	Выберите графику, чтобы применить эффекты
 @msg	the file's variables and data sets weren't read (variables: {variables}, data sets: {data_sets}): the Variables panel doesn't list them	переменные и наборы данных файла не прочитаны (переменных: {variables}, наборов данных: {data_sets}): панель «Переменные» их не показывает
 # Select by Color (select.color)
 	Select by Color	Выделить по цвету
@@ -4978,3 +5003,13 @@ lighting	Light	Свет
 	Water Paper	Мокрая бумага
 	Ruby…	Руби…
 	Ruby	Руби
+	Ease In	Плавное начало
+	Ease Out	Плавное окончание
+	Ease In Out	Плавное начало и окончание
+	Ease Out In	Плавное окончание и начало
+	Ramp:	Сила:
+	Shift:	Сдвиг:
+	Fresco…	Фреска…
+	Fresco	Фреска
+	Effect Gallery…	Галерея эффектов…
+	Effect Gallery Dialog	Диалог «Галерея эффектов»

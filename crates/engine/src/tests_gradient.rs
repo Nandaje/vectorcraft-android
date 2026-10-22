@@ -96,6 +96,33 @@ fn bad_gradients_are_rejected_without_editing() {
     assert_eq!(s.doc().unwrap().history.undo.len(), undo);
 }
 
+/// The gradient commands refuse a `reverse` or `stroke` that is not true or false, and an `angle`
+/// or a stop's `tint` that is not a number, given as text or as another value of the wrong kind:
+/// the object and the undo history stay as they were. True, false, numbers and null still work.
+#[test]
+fn gradient_commands_refuse_a_number_or_boolean_given_as_text() {
+    use super::tests::{not_a_number, not_a_switch, not_refused};
+    let mut s = session();
+    let id = rect(&mut s, 0.0, 0.0, 100.0, 100.0);
+    s.execute("paint.setFill", &json!({"gradient": {"kind": "linear"}})).unwrap();
+    let red = s.execute("swatch.new", &json!({"color": "#ff0000", "global": true})).unwrap()["name"].clone();
+    let stops = |tint: Value| json!([{"offset": 0, "color": "#ff0000", "swatch": red, "tint": tint}, {"offset": 1, "color": "#000000"}]);
+    let calls = [
+        not_a_switch("paint.editGradient", json!({"reverse": "true"}), "reverse"),
+        not_a_switch("paint.editGradient", json!({"angle": 45, "stroke": "false"}), "stroke"),
+        not_a_switch("paint.setGradientGeom", json!({"aspect": 50, "stroke": 0}), "stroke"),
+        not_a_number("paint.editGradient", json!({"angle": "45"}), "angle"),
+        ("paint.setFill".to_string(), json!({"gradient": {"angle": "45"}}), "`angle` must be a number, not \"45\"".to_string()),
+        ("paint.editGradient".to_string(), json!({"stops": stops(json!("50"))}), "stop 0: `tint` must be a number".to_string()),
+        ("paint.setFill".to_string(), json!({"gradient": {"stops": stops(json!([50]))}}), "stop 0: `tint` must be a number".to_string()),
+    ];
+    let wrong = not_refused(&mut s, &calls);
+    assert!(wrong.is_empty(), "not refused: {wrong:#?}");
+    s.execute("paint.editGradient", &json!({"angle": 30, "reverse": false, "stroke": null, "stops": stops(json!(50))})).unwrap();
+    let g = fill_gradient(&s, id);
+    assert_eq!((g.angle, g.gradient.stops[0].tint), (30.0, 0.5));
+}
+
 #[test]
 fn stop_opacity_and_offsets_are_normalised() {
     let mut s = session();

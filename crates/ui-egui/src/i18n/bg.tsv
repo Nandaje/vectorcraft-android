@@ -1049,6 +1049,11 @@
 	Fidelity:	Точност:
 	Figure Space	Цифрово разстояние
 	Figure:	Фигура:
+# Artwork drag between document tabs.
+	Drop Artwork	Поставяне на графика
+@msg	{key} must be [x, y] with finite coordinates	{key} трябва да е [x, y] с крайни координати
+@msg	ids must contain 1–10000 object ids	ids трябва да съдържа от 1 до 10000 идентификатора на обекти
+
 	File	Файл
 	File Dimensions	Размери на файла
 	File Format:	Файлов формат:
@@ -2342,6 +2347,7 @@
 	Proof Setup	Настройка на пробен печат
 	Properties	Свойства
 	Proportional Metrics	Пропорционални метрики
+	Character Direction	Посока на знаците
 	Digits	Цифри
 	Arabic	Арабски
 	Hindi	Хинди
@@ -3900,7 +3906,7 @@ axis	Both	И двете
 @msg	give the path `id` and the width point `index`	дайте пътя `id` и точката на ширина `index`
 @msg	guides are locked	водачите са заключени
 @msg	handle must be in or out	handle трябва да е in или out
-@msg	image '{key}' has no pixels and was left out	изображението '{key}' няма пиксели и беше пропуснато
+@msg	an image has no pixels and was left out	изображение без пиксели беше пропуснато
 @msg	image data `{_1}` is missing	данните за изображение `{_1}` липсват
 @msg	image would be too large; lower the resolution	изображението ще бъде твърде голямо; намалете разделителната способност
 @msg	index must be a number or first, previous, next or last	индексът трябва да е число или first, previous, next или last
@@ -4474,6 +4480,7 @@ effect	Soft	Меко
 	Activate Panel	Активиране на панела
 	Change Panel Layout	Промяна на оформлението на панела
 	Close Panel	Затваряне на панела
+	Collapse Panel Group	Свиване на групата панели
 	Move Panel	Преместване на панела
 	Group with	Групиране с
 	Resize panels	Преоразмеряване на панели
@@ -4484,6 +4491,12 @@ effect	Soft	Меко
 @msg	before must name a panel	параметърът „преди“ трябва да указва панел
 @msg	docking action contains an unknown panel or an excessive split path	действието по закачане съдържа непознат панел или прекомерен път на разделяне
 @msg	group must be true or false	групата трябва да е истина или лъжа
+@msg	panel floats; collapse its group with window.panel.float {panel, collapsed}	панелът е плаващ; свийте групата му с window.panel.float {panel, collapsed}
+@msg	panel is not in a dock group	панелът не е в група на дока
+@msg	only a dock group above or below others collapses, not one beside another	свива се само група на дока над или под други, не и такава до друга
+@msg	icon must be true or false	icon трябва да е истина или лъжа
+@msg	icon only docks a panel in the icon column, with no anchor	icon закачва панел само в колоната с икони, без anchor
+@msg	column docks a set as a dock column, with no anchor or icon	column закачва набор като колона на дока, без anchor или icon
 @msg	move requires a destination panel	преместването изисква целеви панел
 @msg	move requires an existing destination panel	преместването изисква съществуващ целеви панел
 @msg	onto must name a floating panel	параметърът „върху“ трябва да указва плаващ панел
@@ -5241,6 +5254,8 @@ theme	Appearance	Външен вид
 	Sketch	Скица
 	Halftone Pattern…	Полутонов шаблон…
 	Halftone Pattern	Полутонов шаблон
+	Torn Edges…	Разкъсани краища…
+	Torn Edges	Разкъсани краища
 	Pattern Type	Тип шаблон
 	Dot	Точка
 # User Interface › Color Scheme
@@ -5283,6 +5298,7 @@ theme	Appearance	Външен вид
 	Persistent	Постоянна
 	Locate Library…	Намиране на библиотека…
 	Library Panel Options	Опции на панела с библиотека
+	Gap Length:	Дължина на пропуска:
 	Artboard {n} of {total}	Работна област {n} от {total}
 	Encoding and writing the file…	Кодиране и записване на файла…
 @plural	{n} more export waiting|{n} more exports waiting	Още {n} експортиране в изчакване|Още {n} експортирания в изчакване
@@ -5299,6 +5315,14 @@ theme	Appearance	Външен вид
 	Full Justify	Пълно двустранно
 	Minimum must not exceed Desired, nor Desired Maximum.	Минималната стойност не може да надвишава желаната, нито желаната – максималната.
 	Justification	Подравняване
+	Add filters from the list above	Добавете филтри от списъка по-горе
+	Add to Stack	Добавяне към стека
+	Applied Filters	Приложени филтри
+	Categories	Категории
+	Choose a filter	Изберете филтър
+	Effect Gallery	Галерия с ефекти
+	Filters	Филтри
+	Select artwork to apply effects	Изберете графика, за да приложите ефекти
 @msg	the file's variables and data sets weren't read (variables: {variables}, data sets: {data_sets}): the Variables panel doesn't list them	променливите и наборите от данни на файла не бяха прочетени (променливи: {variables}, набори от данни: {data_sets}): панелът „Променливи“ не ги показва
 # Select by Color (select.color)
 	Select by Color	Избиране по цвят
@@ -5324,3 +5348,13 @@ theme	Appearance	Външен вид
 	Water Paper	Мокра хартия
 	Ruby…	Руби…
 	Ruby	Руби
+	Ease In	Плавно начало
+	Ease Out	Плавен край
+	Ease In Out	Плавно начало и край
+	Ease Out In	Плавен край и начало
+	Ramp:	Рампа:
+	Shift:	Изместване:
+	Fresco…	Фреска…
+	Fresco	Фреска
+	Effect Gallery…	Галерия с ефекти…
+	Effect Gallery Dialog	Диалог „Галерия с ефекти“

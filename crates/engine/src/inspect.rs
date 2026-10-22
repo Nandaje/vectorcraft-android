@@ -252,6 +252,7 @@ fn document_base(s: &Session) -> Value {
     let Some(st) = s.active() else { return Value::Null };
     let d = &st.doc;
     json!({
+        "uid": st.uid,
         "title": st.title(),
         "path": st.path,
         "dirty": st.is_dirty(),

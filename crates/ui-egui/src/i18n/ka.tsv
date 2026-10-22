@@ -27,6 +27,11 @@
 	Medium Light	საშუალოდ ღია
 	Light	ღია
 	Quit VectorCraft	VectorCraft-იდან გასვლა
+# Artwork drag between document tabs.
+	Drop Artwork	ნამუშევრის განთავსება
+@msg	{key} must be [x, y] with finite coordinates	{key} უნდა იყოს [x, y] სასრული კოორდინატებით
+@msg	ids must contain 1–10000 object ids	ids უნდა შეიცავდეს 1–10000 ობიექტის იდენტიფიკატორს
+
 	File	ფაილი
 	New…	ახალი…
 	New Without Dialog	ახალი დიალოგის გარეშე
@@ -703,6 +708,7 @@
 	Activate Panel	პანელის გააქტიურება
 	Change Panel Layout	პანელების განლაგების შეცვლა
 	Close Panel	პანელის დახურვა
+	Collapse Panel Group	პანელების ჯგუფის აკეცვა
 	Move Panel	პანელის გადაადგილება
 	Group with	ერთად დაჯგუფება
 	Resize panels	პანელების ზომის შეცვლა
@@ -1226,6 +1232,7 @@ lighting	Light	სინათლე
 	Leading	სტრიქონთა დაშორება
 	No Break	გადატანის გარეშე
 	Proportional Metrics	პროპორციული მეტრიკა
+	Character Direction	სიმბოლოების მიმართულება
 	Digits	ციფრები
 	Arabic	არაბული
 	Hindi	ჰინდი
@@ -3772,7 +3779,7 @@ effect	Regular	ჩვეულებრივი
 @msg	give horizontal or vertical	მიუთითეთ horizontal ან vertical
 @msg	give the path `id` and the width point `index`	მიუთითეთ ტრაექტორიის `id` და სიგანის წერტილის `index`
 @msg	guides are locked	დამხმარე ხაზები ჩაკეტილია
-@msg	image '{key}' has no pixels and was left out	გამოსახულებას '{key}' პიქსელები არ აქვს და გამოტოვდა
+@msg	an image has no pixels and was left out	გამოსახულება, რომელსაც პიქსელები არ აქვს, გამოტოვდა
 @msg	image data `{_1}` is missing	გამოსახულების მონაცემები `{_1}` აკლია
 @msg	image would be too large; lower the resolution	გამოსახულება ზედმეტად დიდი იქნებოდა; შეამცირეთ გარჩევადობა
 @msg	index must be a number or first, previous, next or last	index უნდა იყოს რიცხვი ან first, previous, next ან last
@@ -4201,6 +4208,12 @@ effect	Regular	ჩვეულებრივი
 @msg	before must name a panel	before უნდა ასახელებდეს პანელს
 @msg	docking action contains an unknown panel or an excessive split path	მიმაგრების მოქმედება შეიცავს უცნობ პანელს ან ზედმეტად გრძელ გაყოფის გზას
 @msg	group must be true or false	group უნდა იყოს true ან false
+@msg	panel floats; collapse its group with window.panel.float {panel, collapsed}	პანელი მცურავია; მისი ჯგუფი აკეცეთ window.panel.float {panel, collapsed}-ით
+@msg	panel is not in a dock group	პანელი არ არის დოკის ჯგუფში
+@msg	only a dock group above or below others collapses, not one beside another	იკეცება მხოლოდ სხვების ზემოთ ან ქვემოთ მდებარე დოკის ჯგუფი, არა სხვის გვერდით მდებარე
+@msg	icon must be true or false	icon უნდა იყოს true ან false
+@msg	icon only docks a panel in the icon column, with no anchor	icon პანელს მხოლოდ ხატულების სვეტში ამაგრებს, anchor-ის გარეშე
+@msg	column docks a set as a dock column, with no anchor or icon	column ნაკრებს დოკის სვეტად ამაგრებს, anchor-ის ან icon-ის გარეშე
 @msg	move requires a destination panel	move-ს სჭირდება სამიზნე პანელი
 @msg	move requires an existing destination panel	move-ს სჭირდება არსებული სამიზნე პანელი
 @msg	onto must name a floating panel	onto უნდა ასახელებდეს მცურავ პანელს
@@ -4988,6 +5001,8 @@ imageTrace	Outline	კონტური
 	Sketch	ესკიზი
 	Halftone Pattern…	ნახევარტონური პატერნი…
 	Halftone Pattern	ნახევარტონური პატერნი
+	Torn Edges…	დაგვერძნილი კიდეები…
+	Torn Edges	დაგვერძნილი კიდეები
 	Pattern Type	პატერნის ტიპი
 	Dot	წერტილი
 	Color Scheme	ფერის სქემა
@@ -5181,6 +5196,7 @@ imageTrace	Outline	კონტური
 @msg	handle must be in or out	handle უნდა იყოს in ან out
 @msg	index must be ≥ 0	index უნდა იყოს ≥ 0
 @msg	library panel `{given}` isn't open	ბიბლიოთეკის პანელი `{given}` გახსნილი არ არის
+@msg	library panel `{given}` isn't missing its library	ბიბლიოთეკის პანელს `{given}` ბიბლიოთეკა არ აკლია
 @msg	mask art ends outside a mask dictionary	ნიღბის ნახატი ნიღბის ლექსიკონის გარეთ მთავრდება
 @msg	missing number `{key}`	აკლია რიცხვი `{key}`
 @msg	missing integer `{key}`	აკლია მთელი რიცხვი `{key}`
@@ -5228,6 +5244,7 @@ imageTrace	Outline	კონტური
 # Select by Color (select.color)
 	Select by Color	მონიშვნა ფერის მიხედვით
 @msg	thumbnail: no page {n} (the file has 1)	thumbnail: გვერდი {n} არ არსებობს (ფაილს 1 გვერდი აქვს)
+	Gap Length:	ღრეჩოს სიგრძე:
 	Smudge Stick…	დასაზელი ჯოხი…
 	Smudge Stick	დასაზელი ჯოხი
 	Sponge…	ღრუბელი…
@@ -5277,3 +5294,20 @@ imageTrace	Outline	კონტური
 	 selects several, or draws one inside an artboard)	 რამდენიმეს მონიშნავს ან ახალს სამუშაო დაფის შიგნით ხატავს)
 	Ruby…	რუბი…
 	Ruby	რუბი
+	Ease In	ნელი დასაწყისი
+	Ease Out	ნელი დასასრული
+	Ease In Out	ნელი დასაწყისი და დასასრული
+	Ease Out In	ნელი დასასრული და დასაწყისი
+	Ramp:	სიძლიერე:
+	Shift:	წანაცვლება:
+	Fresco…	ფრესკა…
+	Fresco	ფრესკა
+	Effect Gallery	ეფექტების გალერეა
+	Add filters from the list above	დაამატეთ ფილტრები ზემოთ მოცემული სიიდან
+	Add to Stack	დასტაში დამატება
+	Applied Filters	გამოყენებული ფილტრები
+	Categories	კატეგორიები
+	Filters	ფილტრები
+	Select artwork to apply effects	აირჩიეთ ნამუშევარი ეფექტების გამოსაყენებლად
+	Effect Gallery…	ეფექტების გალერეა…
+	Effect Gallery Dialog	ეფექტების გალერეა დიალოგი

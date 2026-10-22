@@ -970,7 +970,7 @@ fn symbol_place(s: &mut Session, p: &Value) -> Result<Value> {
     let d = &s.doc()?.doc;
     let name = resolve_symbol(d, p, "symbol.place")?;
     let centre = d.artboards.first().map(|a| a.rect.center()).unwrap_or(Point::ZERO);
-    let at = Point::new(f64_or(p, "x", centre.x), f64_or(p, "y", centre.y));
+    let at = Point::new(number_or(p, "x", centre.x, "symbol.place")?, number_or(p, "y", centre.y, "symbol.place")?);
     let size = natural_size(d, &name);
     let reg = d.symbol_registration(&name);
     let parent = s.doc()?.target_parent()?;
@@ -1099,7 +1099,7 @@ fn symbol_delete(s: &mut Session, p: &Value) -> Result<Value> {
     if !s.doc()?.doc.symbols.iter().any(|x| x.name == name) {
         return Err(bad(C, format!("no symbol named `{name}`")));
     }
-    let expand = bool_or(p, "expandInstances", true);
+    let expand = switch_or(p, "expandInstances", true, C)?;
     s.edit("Delete Symbol", |d, _| {
         let inst = instances_of(d, Some(&name));
         if expand {
@@ -1216,10 +1216,10 @@ fn symbol_spray(s: &mut Session, p: &Value) -> Result<Value> {
     let pts = points(p, C)?;
     let st = s.doc()?;
     let name = resolve_symbol(&st.doc, p, C)?;
-    let radius = f64_or(p, "radius", 40.0).clamp(1.0, 2000.0);
-    let density = f64_or(p, "density", 5.0).clamp(1.0, 10.0);
-    let scale = f64_or(p, "scale", 1.0).clamp(0.01, 100.0);
-    let alt = bool_or(p, "alt", false);
+    let radius = number_or(p, "radius", 40.0, C)?.clamp(1.0, 2000.0);
+    let density = number_or(p, "density", 5.0, C)?.clamp(1.0, 10.0);
+    let scale = number_or(p, "scale", 1.0, C)?.clamp(0.01, 100.0);
+    let alt = switch_or(p, "alt", false, C)?;
     let size = natural_size(&st.doc, &name);
     let set = st.selection.objects.first().copied().filter(|id| st.selection.len() == 1 && st.doc.node(*id).is_some_and(is_symbol_set));
     // Only a new Symbol Set needs a layer that takes new art.
@@ -1303,9 +1303,9 @@ fn symbol_adjust(s: &mut Session, p: &Value) -> Result<Value> {
     }
     super::paint::check_keep_model(p, C)?;
     let pts = points(p, C)?;
-    let radius = f64_or(p, "radius", 40.0).clamp(1.0, 2000.0);
-    let intensity = f64_or(p, "intensity", 5.0).clamp(1.0, 10.0) / 10.0;
-    let alt = bool_or(p, "alt", false);
+    let radius = number_or(p, "radius", 40.0, C)?.clamp(1.0, 2000.0);
+    let intensity = number_or(p, "intensity", 5.0, C)?.clamp(1.0, 10.0) / 10.0;
+    let alt = switch_or(p, "alt", false, C)?;
     let st = s.doc()?;
     let color = match p.get("color").and_then(color_value) {
         Some(c) => super::paint::new_color(s, p, c),

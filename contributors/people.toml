@@ -148,5 +148,9 @@ sync_github_name = true
 [people.addibble]
 sync_github_name = true
 
+[people.mockydevs]
+real_name = "Don Omondi"
+display_name = "Don Omondi"
+
 [people.alpha-rock]
 display_name = "Aditya Sisodiya"

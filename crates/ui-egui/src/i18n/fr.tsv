@@ -1069,6 +1069,11 @@
 	Fidelity:	Fidélité :
 	Figure Space	Espace numérique
 	Figure:	Chiffres :
+# Artwork drag between document tabs.
+	Drop Artwork	Déposer l’illustration
+@msg	{key} must be [x, y] with finite coordinates	{key} doit être [x, y] avec des coordonnées finies
+@msg	ids must contain 1–10000 object ids	ids doit contenir de 1 à 10000 identifiants d’objets
+
 	File	Fichier
 	File Dimensions	Dimensions du fichier
 	File Format:	Format de fichier :
@@ -2391,6 +2396,7 @@
 	Proof Setup	Format d’épreuve
 	Properties	Propriétés
 	Proportional Metrics	Métrique proportionnelle
+	Character Direction	Direction des caractères
 	Digits	Chiffres
 	Arabic	Arabes
 	Hindi	Hindi
@@ -3985,7 +3991,7 @@ axis	Both	Les deux
 @msg	give the path `id` and the width point `index`	indiquez l’`id` du tracé et l’`index` du point de largeur
 @msg	guides are locked	les repères sont verrouillés
 @msg	handle must be in or out	handle doit valoir in ou out
-@msg	image '{key}' has no pixels and was left out	l’image « {key} » n’a aucun pixel et a été ignorée
+@msg	an image has no pixels and was left out	une image sans aucun pixel a été ignorée
 @msg	image data `{_1}` is missing	les données d’image `{_1}` sont manquantes
 @msg	image would be too large; lower the resolution	l’image serait trop grande ; réduisez la résolution
 @msg	index must be a number or first, previous, next or last	index doit être un nombre ou first, previous, next ou last
@@ -4569,6 +4575,7 @@ effect	Soft	Doux
 	Activate Panel	Activer le panneau
 	Change Panel Layout	Modifier la disposition des panneaux
 	Close Panel	Fermer le panneau
+	Collapse Panel Group	Réduire le groupe de panneaux
 	Move Panel	Déplacer le panneau
 	Group with	Regrouper avec
 	Resize panels	Redimensionner les panneaux
@@ -4579,6 +4586,12 @@ effect	Soft	Doux
 @msg	before must name a panel	before doit désigner un panneau
 @msg	docking action contains an unknown panel or an excessive split path	L’action d’ancrage contient un panneau inconnu ou un chemin de divisions trop long
 @msg	group must be true or false	group doit être true ou false
+@msg	panel floats; collapse its group with window.panel.float {panel, collapsed}	le panneau est flottant ; réduisez son groupe avec window.panel.float {panel, collapsed}
+@msg	panel is not in a dock group	le panneau n’est dans aucun groupe du dock
+@msg	only a dock group above or below others collapses, not one beside another	seul un groupe du dock situé au-dessus ou au-dessous d’autres se réduit, pas un groupe à côté
+@msg	icon must be true or false	icon doit être true ou false
+@msg	icon only docks a panel in the icon column, with no anchor	icon ne fait qu’ancrer un panneau dans la colonne d’icônes, sans anchor
+@msg	column docks a set as a dock column, with no anchor or icon	column ancre un ensemble comme colonne du dock, sans anchor ni icon
 @msg	move requires a destination panel	Le déplacement nécessite un panneau de destination
 @msg	move requires an existing destination panel	Le déplacement nécessite un panneau de destination existant
 @msg	onto must name a floating panel	onto doit désigner un panneau flottant
@@ -5271,6 +5284,8 @@ theme	Appearance	Apparence
 	Sketch	Esquisse
 	Halftone Pattern…	Trame de demi-teintes…
 	Halftone Pattern	Trame de demi-teintes
+	Torn Edges…	Bords déchirés…
+	Torn Edges	Bords déchirés
 	Pattern Type	Type de motif
 	Dot	Point
 # User Interface › Color Scheme
@@ -5322,9 +5337,11 @@ theme	Appearance	Apparence
 @msg	Persistent libraries not found: {files}	Bibliothèques persistantes introuvables : {files}
 @msg	`{given}` isn't a library panel (see window.swatchLibrary)	`{given}` n’est pas un panneau de bibliothèque (voir window.swatchLibrary)
 @msg	library panel `{given}` isn't open	le panneau de bibliothèque `{given}` n’est pas ouvert
+@msg	library panel `{given}` isn't missing its library	la bibliothèque du panneau de bibliothèque `{given}` ne manque pas
 @msg	too many library panels were opened in this session	trop de panneaux de bibliothèque ont été ouverts dans cette session
 @msg	The image is {_1} × {_2} pixels, more than {LARGE_TRACE_SIDE} on a side: it is traced, but more slowly. A lower-fidelity preset or a smaller copy of the image traces faster.	L’image fait {_1} × {_2} pixels, plus de {LARGE_TRACE_SIDE} sur un côté : elle est vectorisée, mais plus lentement. Un paramètre prédéfini moins fidèle ou une copie plus petite de l’image se vectorise plus vite.
 @msg	The image was traced at {_1} × {_2} pixels, scaled down from {_3} × {_4} ({_5} megapixels at most).	L’image a été vectorisée à {_1} × {_2} pixels, réduite de {_3} × {_4} ({_5} mégapixels au plus).
+	Gap Length:	Longueur de lacune :
 	Artboard {n} of {total}	Plan de travail {n} sur {total}
 	Encoding and writing the file…	Encodage et écriture du fichier…
 @plural	{n} more export waiting|{n} more exports waiting	{n} autre exportation en attente|{n} autres exportations en attente
@@ -5341,6 +5358,14 @@ theme	Appearance	Apparence
 	Full Justify	Justification complète
 	Minimum must not exceed Desired, nor Desired Maximum.	Le minimum ne doit pas dépasser la valeur optimale, ni la valeur optimale le maximum.
 	Justification	Justification
+	Add filters from the list above	Ajoutez des filtres à partir de la liste ci-dessus
+	Add to Stack	Ajouter à la pile
+	Applied Filters	Filtres appliqués
+	Categories	Catégories
+	Choose a filter	Choisir un filtre
+	Effect Gallery	Galerie d'effets
+	Filters	Filtres
+	Select artwork to apply effects	Sélectionnez des éléments graphiques pour appliquer des effets
 @msg	the file's variables and data sets weren't read (variables: {variables}, data sets: {data_sets}): the Variables panel doesn't list them	les variables et jeux de données du fichier n’ont pas été lus (variables : {variables}, jeux de données : {data_sets}) : le panneau Variables ne les affiche pas
 # Select by Color (select.color)
 	Select by Color	Sélectionner par couleur
@@ -5366,3 +5391,13 @@ theme	Appearance	Apparence
 	Water Paper	Papier humide
 	Ruby…	Ruby…
 	Ruby	Ruby
+	Ease In	Accélération progressive
+	Ease Out	Décélération progressive
+	Ease In Out	Accélération et décélération
+	Ease Out In	Décélération et accélération
+	Ramp:	Intensité :
+	Shift:	Décalage :
+	Fresco…	Fresque…
+	Fresco	Fresque
+	Effect Gallery…	Galerie d'effets…
+	Effect Gallery Dialog	Boîte de dialogue Galerie d'effets

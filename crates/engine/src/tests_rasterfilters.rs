@@ -31,11 +31,12 @@ const BRUSH_STROKES: [(&str, &str); 8] = [
 ];
 
 /// Effect › Artistic, at their defaults.
-const ARTISTIC: [(&str, &str); 14] = [
+const ARTISTIC: [(&str, &str); 15] = [
     ("artistic.coloredPencil", "{}"),
     ("artistic.cutout", "{}"),
     ("artistic.dryBrush", "{}"),
     ("artistic.filmGrain", "{}"),
+    ("artistic.fresco", "{}"),
     ("artistic.neonGlow", "{}"),
     // Wide Blurry softens dabs; Simple leaves uniform fills unchanged on the striped art.
     ("artistic.paintDaubs", r#"{"brushType": "wideBlurry"}"#),
@@ -214,6 +215,7 @@ fn artistic_settings_survive_a_save_and_open() {
             json!({"levels": 3.0, "edgeSimplicity": 2.0, "edgeFidelity": 3.0}),
             [json!({"levels": 2.0}), json!({"edgeSimplicity": 10.0})],
         ),
+        ("artistic.fresco", json!({"brushSize": 4.0, "brushDetail": 6.0, "texture": 2.0}), [json!({"brushSize": 8.0}), json!({"texture": 3.0})]),
         (
             "artistic.neonGlow",
             json!({"glowSize": -6.0, "glowBrightness": 30.0, "color": "#ff3300"}),

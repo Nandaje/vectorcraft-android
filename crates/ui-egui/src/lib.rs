@@ -64,6 +64,7 @@ pub mod unsaved;
 pub mod widgets;
 pub mod workspaces;
 
+mod document_drag;
 #[cfg(test)]
 mod tests_adjust;
 #[cfg(test)]
@@ -82,6 +83,8 @@ mod tests_cut;
 mod tests_distortkeys;
 #[cfg(test)]
 mod tests_docsetup;
+#[cfg(test)]
+mod tests_document_drag;
 #[cfg(test)]
 mod tests_font_menu;
 #[cfg(test)]
@@ -321,6 +324,10 @@ pub struct CanvasCache {
     pub renderer: vectorcraft_render::Renderer,
     pub texture: Option<egui::TextureHandle>,
     pub key: Option<CacheKey>,
+    /// The document the frame shown was rendered from, and the options it was rendered with, with
+    /// [`Self::key`]: when only the document changes, the canvas renders again only where it
+    /// changed ([`vectorcraft_render::changed`]).
+    pub shown: Option<(std::sync::Arc<vectorcraft_doc::Document>, vectorcraft_render::RenderOptions)>,
     pub last_ms: f64,
     /// The frame shown drew raster effects from rasters made before their objects moved, or at a
     /// drag's lower resolution ([`vectorcraft_render::FrameStats::moved`]): the next frame outside
@@ -565,6 +572,7 @@ impl VectorcraftApp {
                 renderer: vectorcraft_render::Renderer::new(),
                 texture: None,
                 key: None,
+                shown: None,
                 last_ms: 0.0,
                 moved: false,
                 from_worker: false,

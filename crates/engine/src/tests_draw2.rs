@@ -818,13 +818,17 @@ fn polar_grid_options_compound_fill_and_skew() {
     assert!(tips(&inward)[1..].iter().all(|t| t.x < 50.0), "counterclockwise of the top: {:?}", tips(&inward));
 }
 
-/// The grid options are checked: a skew is a number and a switch true or false, or the command
-/// fails without an undo step.
+/// The grid options are checked: a divider count or a skew is a number and a switch true or false,
+/// or the command fails without an undo step.
 #[test]
 fn grid_commands_reject_options_of_the_wrong_type() {
     let mut s = session();
     let size = json!({"x": 0, "y": 0, "width": 10, "height": 10});
     for (cmd, key, value) in [
+        ("shape.rectangularGrid", "rows", json!("3")),
+        ("shape.rectangularGrid", "columns", json!([4])),
+        ("shape.polarGrid", "concentric", json!(true)),
+        ("shape.polarGrid", "radial", json!("6")),
         ("shape.rectangularGrid", "rowSkew", json!("50")),
         ("shape.rectangularGrid", "columnSkew", json!(true)),
         ("shape.rectangularGrid", "frame", json!(1)),
@@ -1228,6 +1232,40 @@ fn move_anchors_reshape_and_close_refuse_a_number_given_as_text() {
     let after = path(&s, id);
     let moved = after.subpaths[0].anchors.last().map(|a| a.p.x);
     assert!(after.subpaths[0].closed && moved == Some(before.subpaths[0].anchors[1].p.x + 10.0), "{after:?}");
+}
+
+/// Close Path, Set Handle, Move Anchors and the Pencil, Curvature, Reshape Segment and Blob Brush
+/// commands refuse an on/off option given as text or as another value that is not true or false,
+/// naming the key, and change nothing; true, false and null still work.
+#[test]
+fn path_commands_refuse_a_boolean_given_as_text() {
+    let mut s = session();
+    let id = curve(&mut s);
+    s.execute("select.anchors", &json!({"id": id.0, "anchors": [[0, 1]]})).unwrap();
+    let stroke = json!([[100, 300], [150, 340], [200, 300]]);
+    let calls = [
+        ("path.close", json!({"id": id.0, "independent": "true"}), "independent"),
+        ("path.setHandle", json!({"id": id.0, "anchor": 0, "x": 160, "y": 90, "independent": 1}), "independent"),
+        ("path.moveAnchors", json!({"dx": 10, "patterns": "true"}), "patterns"),
+        ("path.freehand", json!({"points": stroke, "closed": "true"}), "closed"),
+        ("path.freehand", json!({"points": stroke, "keepSelected": "false"}), "keepSelected"),
+        ("path.freehand", json!({"points": stroke, "fill": [true]}), "fill"),
+        ("path.curvature", json!({"points": stroke, "closed": "true"}), "closed"),
+        ("path.curvature", json!({"points": [{"x": 100, "y": 300, "corner": "true"}, [150, 340], [200, 300]]}), "corner"),
+        ("path.curvatureEdit", json!({"id": id.0, "op": "move", "anchor": 1, "x": 300, "y": 150, "corner": "true"}), "corner"),
+        ("path.reshapeSegment", json!({"id": id.0, "segment": 0, "dy": 20, "perpendicular": "true"}), "perpendicular"),
+        ("path.blob", json!({"points": stroke, "keepSelected": "true"}), "keepSelected"),
+        ("path.blob", json!({"points": stroke, "mergeOnlySelection": 1}), "mergeOnlySelection"),
+        ("path.blob", json!({"points": stroke, "merge": "false"}), "merge"),
+    ]
+    .map(|(cmd, p, key)| super::tests::not_a_switch(cmd, p, key));
+    let wrong = super::tests::not_refused(&mut s, &calls);
+    assert!(wrong.is_empty(), "not refused: {wrong:#?}");
+    s.execute("path.setHandle", &json!({"id": id.0, "anchor": 0, "x": 160, "y": 90, "independent": true})).unwrap();
+    s.execute("path.close", &json!({"id": id.0, "independent": null})).unwrap();
+    s.execute("path.freehand", &json!({"points": stroke, "closed": false, "keepSelected": null, "fill": true})).unwrap();
+    s.execute("path.blob", &json!({"points": stroke, "merge": false, "keepSelected": null, "mergeOnlySelection": false})).unwrap();
+    assert!(path(&s, id).subpaths[0].closed);
 }
 
 #[test]

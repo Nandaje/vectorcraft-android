@@ -1033,6 +1033,11 @@
 	Fidelity:	精確度：
 	Figure Space	數字空格
 	Figure:	數字：
+# Artwork drag between document tabs.
+	Drop Artwork	放置圖稿
+@msg	{key} must be [x, y] with finite coordinates	{key} 必須是具有有限座標的 [x, y]
+@msg	ids must contain 1–10000 object ids	ids 必須包含 1–10000 個物件 ID
+
 	File	檔案
 	File Dimensions	檔案尺寸
 	File Format:	檔案格式：
@@ -1612,7 +1617,7 @@ file-filter	Templates	範本
 @msg	the scale is not a usable number	比例不是可用的數字
 @msg	the drawing is too large to open	圖面過大，無法開啟
 @msg	scale must be a number from {_1} to {_2}, not {_3}	比例必須是 {_1} 到 {_2} 之間的數字，而非 {_3}
-@msg	image '{key}' has no pixels and was left out	影像 '{key}' 沒有像素，已略過
+@msg	an image has no pixels and was left out	已略過沒有像素的影像
 @msg	Embedded {n} image(s)	已內嵌 {n} 個影像
 @msg	object {0} cannot have children	物件 {0} 不能有子物件
 @msg	range `{s}` is empty	範圍 `{s}` 是空的
@@ -2258,6 +2263,12 @@ file-filter	Templates	範本
 @msg	before must name a panel	before 必須指定面板
 @msg	docking action contains an unknown panel or an excessive split path	停駐動作包含未知的面板或過長的分割路徑
 @msg	group must be true or false	group 必須是 true 或 false
+@msg	panel floats; collapse its group with window.panel.float {panel, collapsed}	面板處於浮動狀態；請使用 window.panel.float {panel, collapsed} 摺疊其面板群組
+@msg	panel is not in a dock group	面板不在停駐群組中
+@msg	only a dock group above or below others collapses, not one beside another	只有位於其他群組上方或下方的停駐群組可以摺疊，並排的不行
+@msg	icon must be true or false	icon 必須為 true 或 false
+@msg	icon only docks a panel in the icon column, with no anchor	icon 只會將面板停駐到圖示欄中，不能帶 anchor
+@msg	column docks a set as a dock column, with no anchor or icon	column 會將一組面板停駐為停駐欄，不能帶 anchor 或 icon
 @msg	move requires a destination panel	移動需要目的地面板
 @msg	move requires an existing destination panel	移動需要現有的目的地面板
 @msg	onto must name a floating panel	onto 必須指定浮動面板
@@ -2323,6 +2334,7 @@ file-filter	Templates	範本
 @msg	Persistent libraries not found: {files}	找不到持久資料庫：{files}
 @msg	`{given}` isn't a library panel (see window.swatchLibrary)	`{given}` 不是資料庫面板 (請參閱 window.swatchLibrary)
 @msg	library panel `{given}` isn't open	資料庫面板 `{given}` 未開啟
+@msg	library panel `{given}` isn't missing its library	資料庫面板 `{given}` 的資料庫未遺失
 @msg	too many library panels were opened in this session	本次工作階段開啟的資料庫面板過多
 @msg	The image is {_1} × {_2} pixels, more than {LARGE_TRACE_SIDE} on a side: it is traced, but more slowly. A lower-fidelity preset or a smaller copy of the image traces faster.	影像為 {_1} × {_2} 像素，有一邊超過 {LARGE_TRACE_SIDE}：仍會描圖，但速度較慢。使用精確度較低的預設集或較小的影像拷貝，描圖會較快。
 @msg	The image was traced at {_1} × {_2} pixels, scaled down from {_3} × {_4} ({_5} megapixels at most).	影像已以 {_1} × {_2} 像素描圖，由 {_3} × {_4} 縮小而來 (最多 {_5} 百萬像素)。
@@ -3166,6 +3178,7 @@ font-script	Japanese	漢字
 	Proof Setup	校樣設定
 	Properties	內容
 	Proportional Metrics	比例度量
+	Character Direction	字元方向
 	Digits	數字
 	Arabic	阿拉伯數字
 	Hindi	印地數字
@@ -4689,6 +4702,7 @@ effect	Soft	柔和
 	Activate Panel	啟用面板
 	Change Panel Layout	變更面板配置
 	Close Panel	關閉面板
+	Collapse Panel Group	摺疊面板群組
 	Move Panel	移動面板
 	Group with	群組至
 	Resize panels	調整面板大小
@@ -4917,6 +4931,8 @@ lighting	Light	光源
 	Sketch	素描
 	Halftone Pattern…	半色調圖樣…
 	Halftone Pattern	半色調圖樣
+	Torn Edges…	撕裂邊緣…
+	Torn Edges	撕裂邊緣
 	Pattern Type	圖樣類型
 	Dot	網點
 # User Interface › Color Scheme
@@ -4954,6 +4970,7 @@ lighting	Light	光源
 	Persistent	持久
 	Locate Library…	尋找資料庫…
 	Library Panel Options	資料庫面板選項
+	Gap Length:	間隙長度：
 	Artboard {n} of {total}	工作區域 {n} / {total}
 	Encoding and writing the file…	正在編碼並寫入檔案…
 @plural	{n} more export waiting|{n} more exports waiting	另有 {n} 個匯出等待中
@@ -4971,6 +4988,14 @@ lighting	Light	光源
 	Minimum must not exceed Desired, nor Desired Maximum.	最小值不可超過所需值，所需值不可超過最大值。
 	Minimum	最小值
 	Justification	對齊設定
+	Add filters from the list above	從上方清單新增濾鏡
+	Add to Stack	加入堆疊
+	Applied Filters	已套用的濾鏡
+	Categories	類別
+	Choose a filter	選擇濾鏡
+	Effect Gallery	效果庫
+	Filters	濾鏡
+	Select artwork to apply effects	選取要套用效果的圖稿
 # Select by Color (select.color)
 	Select by Color	依顏色選取
 @msg	missing integer `{key}`	未提供整數 `{key}`
@@ -5001,3 +5026,13 @@ lighting	Light	光源
 	Water Paper	水彩畫紙
 	Ruby…	注音…
 	Ruby	注音
+	Ease In	緩入
+	Ease Out	緩出
+	Ease In Out	緩入緩出
+	Ease Out In	緩出緩入
+	Ramp:	強度：
+	Shift:	偏移：
+	Fresco…	壁畫…
+	Fresco	壁畫
+	Effect Gallery…	效果庫…
+	Effect Gallery Dialog	效果庫對話框

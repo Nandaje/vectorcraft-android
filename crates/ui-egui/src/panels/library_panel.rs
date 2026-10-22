@@ -17,7 +17,9 @@ use std::sync::{Mutex, PoisonError};
 use egui::{Rect, Sense, Ui};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use vectorcraft_engine::cmd::swatchlib::LibraryInfo;
+use vectorcraft_doc::style_libs::STYLES_EXT;
+use vectorcraft_engine::cmd::fileio;
+use vectorcraft_engine::cmd::swatchlib::{self, LibraryInfo};
 
 use super::swatches::{View, click_selection, folder_tile, list_row, list_row_name, tile_grid};
 use super::{pstate, set_pstate};
@@ -487,19 +489,24 @@ pub(crate) fn command(app: &mut VectorcraftApp, p: &Value) -> Result<Value, Stri
 }
 
 /// `ui.libraryPanel.locate {panel, path?}`: Locate Library… of a library panel whose library is
-/// missing. Load the library at `path`, else one picked in an open dialog (on the web the picked
-/// file arrives later and opens in a panel of its own, as Other Library…'s does), and show it in
-/// open panel `panel`, which keeps its view, Show Find Field and Persistent. When the file's
-/// library has a panel open already, `panel` closes and is forgotten, and that panel is brought
-/// forward, made persistent when `panel` was. → what `ui.libraryPanel` answers
+/// missing ([`missing_file`]; any other panel is an error). Load the library at `path`, else one
+/// picked in an open dialog (on the web the picked file arrives later and opens in a panel of its
+/// own, as Other Library…'s does), and show it in open panel `panel`, which keeps its view, Show
+/// Find Field and Persistent. When the file's library has a panel open already, `panel` closes and
+/// is forgotten, and that panel is brought forward, made persistent when `panel` was. → what
+/// `ui.libraryPanel` answers
 pub(crate) fn locate(app: &mut VectorcraftApp, p: &Value) -> Result<Value, String> {
     let given = p.get("panel").and_then(Value::as_str).unwrap_or_default();
     let (k, id) = parse(given).ok_or_else(|| format!("`{given}` isn't a library panel (see window.swatchLibrary)"))?;
     if !is_open(&app.ui, given) {
         return Err(format!("library panel `{given}` isn't open"));
     }
+    if missing_file(app, k, id).is_none() {
+        return Err(format!("library panel `{given}` isn't missing its library"));
+    }
     let path = p.get("path").and_then(Value::as_str).map(str::to_string);
-    let Some(path) = pick_library_file(app, path)? else { return Ok(Value::Null) };
+    let filters = library_pick_filters(k.kind);
+    let Some(path) = pick_library_file(app, path, filters)? else { return Ok(Value::Null) };
     let r = app.run(k.load, json!({ "path": path }))?;
     let next = r["library"].as_str().unwrap_or_default().to_string();
     let to = panel_id(k.kind, &next);
@@ -525,9 +532,22 @@ fn set(app: &mut VectorcraftApp, panel: &str, mut params: Value) {
     }
 }
 
+/// Open-dialog filters for Other Library… / Locate Library… of library panels of kind `kind`.
+pub(crate) fn library_pick_filters(kind: &str) -> Vec<(&'static str, &'static [&'static str])> {
+    match kind {
+        super::swatches::SwatchLibraries::KIND => fileio::library_open_filters("Swatch libraries", swatchlib::LIBRARY_EXTS).collect(),
+        super::graphic_styles::GraphicStyleLibraries::KIND => fileio::library_open_filters("Graphic Style Libraries", &[STYLES_EXT]).collect(),
+        _ => fileio::open_filters().collect(),
+    }
+}
+
 /// Other Library…: the library file at `path`, else one picked in an open dialog; `None` when the
 /// pick is asynchronous (on the web the picked file arrives later through [`crate::io::open_bytes`]).
-pub(crate) fn pick_library_file(app: &mut VectorcraftApp, path: Option<String>) -> Result<Option<String>, String> {
+pub(crate) fn pick_library_file(
+    app: &mut VectorcraftApp,
+    path: Option<String>,
+    filters: Vec<(&'static str, &'static [&'static str])>,
+) -> Result<Option<String>, String> {
     if path.is_none()
         && let Some(f) = app.services.open_async.as_mut()
     {
@@ -535,7 +555,7 @@ pub(crate) fn pick_library_file(app: &mut VectorcraftApp, path: Option<String>) 
         return Ok(None);
     }
     path.or_else(|| {
-        let pick = crate::FilePick { filters: crate::FilePick::filters(vectorcraft_engine::cmd::fileio::open_filters()), ..Default::default() };
+        let pick = crate::FilePick { filters: crate::FilePick::filters(filters), ..Default::default() };
         crate::picks::open(app, &pick)
     })
     .map(Some)
@@ -1290,6 +1310,26 @@ mod tests {
         assert_eq!((r["panel"].as_str(), r["persistent"].as_bool()), (Some(other.as_str()), Some(true)));
         assert!(!is_open(&next.ui, &brand) && is_open(&next.ui, &other));
         assert!(next.ui.library_panels.iter().all(|p| p.panel() != brand), "the missing panel is forgotten");
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn locate_library_leaves_a_panel_whose_library_is_there_alone() {
+        let dir = std::env::temp_dir().join(format!("vc-locate-found-library-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let gpl = dir.join("Brand.gpl");
+        std::fs::write(&gpl, "GIMP Palette\nName: Brand\n#\n255   0   0\tRed\n").unwrap();
+        let mut app = app();
+        let pastels = panel_of(app.run("window.swatchLibrary", json!({"library": "pastels"})).unwrap());
+        for persistent in [false, true] {
+            app.run("ui.libraryPanel", json!({"panel": pastels, "persistent": persistent})).unwrap();
+            let e = app.run("ui.libraryPanel.locate", json!({"panel": pastels, "path": gpl.to_string_lossy()})).unwrap_err();
+            assert!(e.contains("isn't missing its library"), "{e}");
+            assert!(is_open(&app.ui, &pastels), "persistent: {persistent}");
+            assert_eq!(settings(&app.ui, "swatches", "pastels").map(|s| s.persistent), Some(persistent));
+        }
+        assert!(SwatchLibraries::get(&app, &format!("loaded/{}", gpl.to_string_lossy())).is_none(), "the file isn't loaded");
         let _ = std::fs::remove_dir_all(dir);
     }
 

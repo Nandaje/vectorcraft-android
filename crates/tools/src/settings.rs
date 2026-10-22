@@ -42,7 +42,11 @@ const ROWS: &[Row] = &[
     (&["star"], None, &["points"]),
     (&["freeTransform"], None, &["constrain"]),
     // Shape Builder Tool Options (`builder::ShapeBuilderOptions`).
-    (&["shapeBuilder"], None, &["openFilledAsClosed", "pickColorFrom", "cursorSwatchPreview", "selection", "highlightFill"]),
+    (
+        &["shapeBuilder"],
+        None,
+        &["openFilledAsClosed", "pickColorFrom", "cursorSwatchPreview", "selection", "highlightFill", "gapDetection", "gapLength"],
+    ),
     (&["artboard"], None, &["moveArt", "scaleArt"]),
     // Flare Tool Options (`extra::FLARE_OPTIONS` and the Rays and Rings checkboxes).
     (

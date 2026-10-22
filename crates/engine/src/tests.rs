@@ -531,6 +531,29 @@ fn align_and_distribute_refuse_a_boolean_given_as_text() {
     assert_eq!(state(&s).1, [0.0, 0.0]);
 }
 
+/// Align, Distribute and Distribute Spacing to an artboard refuse an `artboard` given as text or as
+/// another value that is not a number, naming the key: nothing moves and no undo step is recorded.
+/// A null is read as the key left out.
+#[test]
+fn align_and_distribute_refuse_an_artboard_given_as_text() {
+    let mut s = session();
+    let a = rect(&mut s, 0.0, 0.0, 10.0, 10.0);
+    let b = rect(&mut s, 50.0, 30.0, 10.0, 10.0);
+    let c = rect(&mut s, 70.0, 60.0, 10.0, 10.0);
+    s.execute("select.set", &json!({"ids": [a.0, b.0, c.0]})).unwrap();
+    let calls = [
+        ("object.align", json!({"horizontal": "right", "to": "artboard", "artboard": "0"})),
+        ("object.distribute", json!({"horizontal": "left", "to": "artboard", "artboard": [0]})),
+        ("object.distributeSpacing", json!({"axis": "horizontal", "to": "artboard", "artboard": true})),
+    ]
+    .map(|(cmd, p)| not_a_number(cmd, p, "artboard"));
+    let wrong = not_refused(&mut s, &calls);
+    assert!(wrong.is_empty(), "not refused: {wrong:#?}");
+    s.execute("object.align", &json!({"horizontal": "right", "to": "artboard", "artboard": null})).unwrap();
+    let right = |id: NodeId| s.doc().unwrap().doc.node(id).unwrap().geometric_bounds().unwrap().x1;
+    assert_eq!([right(a), right(b), right(c)], [s.doc().unwrap().doc.artboards[0].rect.x1; 3]);
+}
+
 /// Align, Distribute and Distribute Spacing return an error that lists the choices of a param
 /// given a value outside them: nothing moves and no undo step is recorded. A null value counts as
 /// not given, and Distribute Spacing without an `axis` spaces the objects horizontally.
@@ -806,6 +829,32 @@ fn selection_tool_drag_is_one_undo_step() {
 pub(crate) fn history(s: &Session) -> (usize, usize, bool) {
     let st = s.doc().unwrap();
     (st.history.undo.len(), st.history.redo.len(), st.is_dirty())
+}
+
+/// A call to `cmd` with `p` that must fail with "`key` must be true or false".
+pub(crate) fn not_a_switch(cmd: &str, p: serde_json::Value, key: &str) -> (String, serde_json::Value, String) {
+    (cmd.to_string(), p, format!("`{key}` must be true or false"))
+}
+
+/// A call to `cmd` with `p` that must fail with "`key` must be a number, not <value>", the value
+/// `p` gives for `key`.
+pub(crate) fn not_a_number(cmd: &str, p: serde_json::Value, key: &str) -> (String, serde_json::Value, String) {
+    let msg = format!("`{key}` must be a number, not {}", p[key]);
+    (cmd.to_string(), p, msg)
+}
+
+/// The calls among `calls` (a command, its params and the error it must give) that do not fail
+/// with that error, or that change the document or its history, as "command params".
+pub(crate) fn not_refused(s: &mut Session, calls: &[(String, serde_json::Value, String)]) -> Vec<String> {
+    calls
+        .iter()
+        .filter(|(cmd, p, want)| {
+            let (before, h) = (s.doc().unwrap().doc.clone(), history(s));
+            let r = s.execute(cmd, p);
+            !(matches!(&r, Err(EngineError::BadParams { msg, .. }) if msg == want) && s.doc().unwrap().doc == before && history(s) == h)
+        })
+        .map(|(cmd, p, _)| format!("{cmd} {p}"))
+        .collect()
 }
 
 /// Select `ids` with a move of them left to redo, and mark the document saved.
@@ -1130,6 +1179,99 @@ fn a_boolean_given_as_text_for_a_transform_is_an_error() {
     s.execute("object.scale", &json!({"sx": 200, "strokes": false, "corners": null, "copy": false})).unwrap();
     let (b, w) = (bounds(&s), s.doc().unwrap().doc.node(a).unwrap().appearance.stroke_width());
     assert_eq!((b.width(), w), (100.0, before.2));
+}
+
+/// Object Properties' opacity, Live Shape Properties' corner radius and polygon sides, and the
+/// Transform panel's reference point given as text or as another value that is not a number are an
+/// error naming the key, and so is Live Shape Properties' relative rounding given as anything but
+/// true or false; the objects and the undo history stay as they were. Numbers and null still work.
+#[test]
+fn object_properties_live_shapes_and_bounds_refuse_a_number_or_boolean_given_as_text() {
+    let mut s = session();
+    let a = rect(&mut s, 0.0, 0.0, 20.0, 20.0);
+    let poly = NodeId(s.execute("shape.polygon", &json!({"cx": 100, "cy": 100, "radius": 20})).unwrap()["id"].as_u64().unwrap());
+    s.execute("select.set", &json!({"ids": [a.0]})).unwrap();
+    let mut calls = [
+        ("object.setProps", json!({"id": a.0, "opacity": "50"}), "opacity"),
+        ("object.setLiveShape", json!({"ids": [a.0], "radius": "5"}), "radius"),
+        ("object.setLiveShape", json!({"ids": [poly.0], "sides": "8"}), "sides"),
+        ("object.setBounds", json!({"width": 40, "reference": "0"}), "reference"),
+    ]
+    .map(|(cmd, p, key)| not_a_number(cmd, p, key))
+    .to_vec();
+    calls.push(not_a_switch("object.setLiveShape", json!({"ids": [a.0], "radius": 5, "relativeRadii": "true"}), "relativeRadii"));
+    let wrong = not_refused(&mut s, &calls);
+    assert!(wrong.is_empty(), "not refused: {wrong:#?}");
+    s.execute("object.setProps", &json!({"id": a.0, "opacity": 50})).unwrap();
+    s.execute("object.setBounds", &json!({"width": 40, "reference": 0, "x": null})).unwrap();
+    let n = s.doc().unwrap().doc.node(a).unwrap().clone();
+    assert_eq!((n.opacity, n.geometric_bounds().unwrap()), (0.5, vectorcraft_geom::Rect::new(0.0, 0.0, 40.0, 20.0)));
+}
+
+/// The shape tools' commands and the Pen's `path.create` refuse a number or an on/off option given
+/// as text or as another value of the wrong kind, naming the key, and draw nothing; null is read as
+/// the key left out.
+#[test]
+fn shape_commands_refuse_a_number_or_boolean_given_as_text() {
+    let mut s = session();
+    let star = json!({"cx": 100, "cy": 100, "radius1": 20});
+    let flare = json!({"cx": 100, "cy": 100});
+    let spiral = json!({"cx": 100, "cy": 100, "radius": 40});
+    let with = |base: &serde_json::Value, key: &str, v: serde_json::Value| {
+        let mut p = base.clone();
+        p[key] = v;
+        p
+    };
+    let mut calls: Vec<_> = [
+        ("shape.rectangle", json!({"x": 0, "y": 0, "width": 10, "height": 10, "radius": "2"}), "radius"),
+        ("shape.polygon", json!({"cx": 100, "cy": 100, "radius": 20, "rotation": "45"}), "rotation"),
+        ("shape.polygon", json!({"cx": 100, "cy": 100, "radius": 20, "sides": "8"}), "sides"),
+        ("shape.star", with(&star, "radius2", json!("10")), "radius2"),
+        ("shape.star", with(&star, "rotation", json!([45])), "rotation"),
+        ("shape.star", with(&star, "points", json!("7")), "points"),
+        ("shape.flare", with(&flare, "diameter", json!("100")), "diameter"),
+        ("shape.flare", with(&flare, "opacity", json!("50")), "opacity"),
+        ("shape.flare", with(&flare, "largest", json!(true)), "largest"),
+        ("shape.flare", with(&flare, "rays", json!("15")), "rays"),
+        ("shape.flare", json!({"cx": 100, "cy": 100, "x2": "300", "y2": 300}), "x2"),
+        ("shape.flare", with(&flare, "direction", json!("45")), "direction"),
+        ("shape.flare", with(&flare, "seed", json!("7")), "seed"),
+        ("shape.spiral", with(&spiral, "decay", json!("80")), "decay"),
+        ("shape.spiral", with(&spiral, "segments", json!("10")), "segments"),
+    ]
+    .into_iter()
+    .map(|(cmd, p, key)| not_a_number(cmd, p, key))
+    .collect();
+    calls.extend(
+        [
+            ("shape.spiral", with(&spiral, "clockwise", json!("false")), "clockwise"),
+            ("shape.arc", json!({"x1": 0, "y1": 0, "x2": 50, "y2": 50, "closed": "true"}), "closed"),
+            ("path.create", json!({"anchors": [{"x": 0, "y": 0}, {"x": 50, "y": 0}], "closed": 1}), "closed"),
+        ]
+        .map(|(cmd, p, key)| not_a_switch(cmd, p, key)),
+    );
+    let wrong = not_refused(&mut s, &calls);
+    assert!(wrong.is_empty(), "not refused: {wrong:#?}");
+    s.execute("shape.star", &json!({"cx": 100, "cy": 100, "radius1": 20, "radius2": null, "points": null, "rotation": null})).unwrap();
+    s.execute("shape.flare", &json!({"cx": 100, "cy": 100, "diameter": 50, "x2": null, "seed": 7})).unwrap();
+    s.execute("shape.arc", &json!({"x1": 0, "y1": 0, "x2": 50, "y2": 50, "closed": false})).unwrap();
+}
+
+/// `path.create` given path data (`d`) refuses a `closed` other than true, false or null, as it does
+/// with `anchors`, and draws nothing; with true, false or null it draws the path data, which alone
+/// decides whether the path is closed.
+#[test]
+fn path_create_with_path_data_refuses_closed_given_as_text() {
+    let mut s = session();
+    let d = "M0 0 L10 0 L10 10";
+    let calls = [json!("true"), json!(1), json!([true])].map(|v| not_a_switch("path.create", json!({"d": d, "closed": v}), "closed"));
+    let wrong = not_refused(&mut s, &calls);
+    assert!(wrong.is_empty(), "not refused: {wrong:#?}");
+    for closed in [json!(true), json!(false), json!(null)] {
+        let id = NodeId(s.execute("path.create", &json!({"d": d, "closed": closed})).unwrap()["id"].as_u64().unwrap());
+        let NodeKind::Path { path, .. } = &s.doc().unwrap().doc.node(id).unwrap().kind else { panic!("a path") };
+        assert_eq!((path.subpaths.len(), path.anchor_count(), path.is_closed()), (1, 3, false), "closed: {closed}");
+    }
 }
 
 /// #1824: with anchors selected with Direct Selection, the Transform panel's X/Y/W/H

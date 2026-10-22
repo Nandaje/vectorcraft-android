@@ -382,6 +382,28 @@ fn images_are_written_in_the_form_the_specification_shows() {
     assert!(rgb.iter().zip([247.0, 148.0, 29.0]).all(|(c, want)| (c * 255.0 - want).abs() < 0.1), "{rgb:?}");
 }
 
+/// An image whose data is empty is left out with the note for empty or too large images, and an
+/// image whose data can't be decoded is left out with the decode note.
+#[test]
+fn empty_images_get_the_size_note_and_undecodable_ones_the_decode_note() {
+    let notes = |bytes: Vec<u8>| {
+        let mut doc = Document::new(100.0, 100.0);
+        doc.layers.clear();
+        let layer = doc.add_layer(Some("Images"));
+        let blob = ImageBlob::new("image/png", bytes);
+        let key = blob.content_key();
+        doc.images.insert(key.clone(), blob);
+        let im = ImageObject { key, width: 4, height: 2, xf: Affine::IDENTITY, link: None, placement: Default::default() };
+        let node = Node::new(doc.alloc_id(), NodeKind::Image(Box::new(im)));
+        doc.insert(Some(layer), usize::MAX, node).unwrap();
+        let out = export_legacy_ai(&doc, &LegacyAiOptions::default()).unwrap();
+        assert!(rasters(&String::from_utf8(out.bytes).unwrap()).is_empty());
+        out.warnings
+    };
+    assert_eq!(notes(vec![]), [LARGE_IMAGE]);
+    assert_eq!(notes(b"not an image".to_vec()), [UNDECODED]);
+}
+
 #[test]
 fn a_gradient_fill_and_its_stroke_are_one_object() {
     let mut doc = Document::new(100.0, 100.0);

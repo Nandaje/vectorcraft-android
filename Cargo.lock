@@ -713,6 +713,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "chrono"
+version = "0.4.45"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1aa79e62e7697b8e29b513a68abacf485adcd1fe8284a4316c5ae868e6633327"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "cipher"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4569,6 +4578,7 @@ version = "0.14.0"
 dependencies = [
  "arboard",
  "block2 0.6.2",
+ "chrono",
  "clipboard-win",
  "craft-print",
  "craft-window",
@@ -4678,6 +4688,7 @@ dependencies = [
 name = "vectorcraft-doc"
 version = "0.14.0"
 dependencies = [
+ "chrono",
  "hayro-ccitt",
  "image",
  "jpeg-encoder",
@@ -4846,6 +4857,7 @@ name = "vectorcraft-pdf"
 version = "0.14.0"
 dependencies = [
  "aes",
+ "chrono",
  "craft-pdf",
  "flate2",
  "image",

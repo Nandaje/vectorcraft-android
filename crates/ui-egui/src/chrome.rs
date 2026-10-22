@@ -448,6 +448,7 @@ pub fn doc_tabs(app: &mut VectorcraftApp, ui: &mut Ui) {
     let mut x = strip.left();
     let mut activate = None;
     let mut close = None;
+    let mut hovering_art = false;
     for (i, ((_, galley), w)) in tabs.iter().zip(&widths).enumerate().skip(first) {
         if x + w > strip.left() + room && Some(i) != active {
             break;
@@ -468,6 +469,7 @@ pub fn doc_tabs(app: &mut VectorcraftApp, ui: &mut Ui) {
         let xresp = ui.interact(xr.expand(3.0), ui.id().with(("tabx", i)), Sense::click());
         icons::paint(ui, "x", xr, if xresp.hovered() { t.text_strong } else { t.text });
         ui.painter().galley(egui::pos2(title_left, r.center().y - galley.size().y / 2.0), galley.clone(), t.text);
+        hovering_art |= crate::document_drag::hover_tab(app, &resp, i, xr.expand(3.0));
         if xresp.clicked() {
             close = Some(i);
         } else if resp.clicked() {
@@ -475,6 +477,7 @@ pub fn doc_tabs(app: &mut VectorcraftApp, ui: &mut Ui) {
         }
         x += w;
     }
+    crate::document_drag::finish_tabs(ui.ctx(), hovering_art);
     // The » button: every open document, the active one checked.
     if overflow {
         let more = egui::Rect::from_min_max(egui::pos2(strip.right() - MORE, strip.top()), egui::pos2(strip.right(), strip.bottom() - 1.0));

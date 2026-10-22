@@ -509,3 +509,162 @@ fn type_takes_the_stroke_options_it_has() {
     assert_eq!((st.stroke.color().unwrap().to_hex(), st.stroke_width, st.stroke_cap), ("#0000ff".into(), 5.0, LineCap::Round));
     assert!(st.stroke_dash.is_none(), "the dash pattern isn't applied");
 }
+
+/// Unsupported object transparency must fail atomically; opting out still samples the range.
+#[test]
+fn eyedropper_text_range_rejects_object_transparency_without_changes() {
+    for transparency in [json!({"opacity": 50}), json!({"blend": "multiply"})] {
+        let mut s = session();
+        s.prefs.placeholder_text = false;
+        let src = rect(&mut s, 300.0);
+        s.execute("paint.setFill", &json!({"color": "#00ff00"})).unwrap();
+        s.execute("transparency.set", &transparency).unwrap();
+        let view = ViewInfo::default();
+        s.select_tool("type", view).unwrap();
+        for kind in [PointerKind::Down, PointerKind::Up] {
+            s.pointer(&PointerEvent::new(kind, 20.0, 300.0), view).unwrap();
+        }
+        s.tool_text("MAMA NA KAZI", view).unwrap();
+        s.set_tool_option("select", &json!({"start": 0, "end": 4}));
+        s.select_tool("eyedropper", view).unwrap();
+        s.execute("paint.setFill", &json!({"color": "#b00000"})).unwrap();
+        let doc = s.doc().unwrap().doc.clone();
+        let paint = s.paint.clone();
+        let undo = s.doc().unwrap().history.undo.len();
+        let selection = s.tool_options();
+        let err = s.execute("appearance.copyFrom", &json!({"source": src.0})).unwrap_err();
+        assert!(err.to_string().contains("object transparency"), "{err}");
+        assert_eq!(s.doc().unwrap().doc, doc);
+        assert_eq!(s.paint, paint);
+        assert_eq!(s.doc().unwrap().history.undo.len(), undo);
+        assert_eq!(s.tool_options(), selection);
+        // Disabling transparency still copies the paint to just the highlighted characters.
+        s.execute("appearance.copyFrom", &json!({"source": src.0, "apply": {"appearance": {"transparency": false}}})).unwrap();
+        let dst = s.doc().unwrap().selection.objects[0];
+        let NodeKind::Text(t) = node(&s, dst).kind else { panic!() };
+        assert_eq!(t.runs[0].text, "MAMA");
+        assert_eq!(t.runs[0].style.fill.color().unwrap().to_hex(), "#00ff00");
+        assert_eq!(t.runs[1].text, " NA KAZI");
+        let NodeKind::Text(before) = &doc.node(dst).unwrap().kind else { panic!() };
+        assert_eq!(t.runs[1].style, before.runs.last().unwrap().style);
+    }
+}
+
+/// An opaque sample cannot replace only a range's inherited object transparency.
+#[test]
+fn eyedropper_text_range_rejects_target_transparency_without_changes() {
+    for transparency in [json!({"opacity": 50}), json!({"blend": "multiply"})] {
+        let mut s = session();
+        s.prefs.placeholder_text = false;
+        let src = rect(&mut s, 300.0);
+        s.execute("paint.setFill", &json!({"color": "#00ff00"})).unwrap();
+        let view = ViewInfo::default();
+        s.select_tool("type", view).unwrap();
+        for kind in [PointerKind::Down, PointerKind::Up] {
+            s.pointer(&PointerEvent::new(kind, 20.0, 300.0), view).unwrap();
+        }
+        s.tool_text("MAMA NA KAZI", view).unwrap();
+        let dst = s.doc().unwrap().selection.objects[0];
+        s.execute("transparency.set", &transparency).unwrap();
+        s.set_tool_option("select", &json!({"start": 0, "end": 4}));
+        s.select_tool("eyedropper", view).unwrap();
+        s.execute("paint.setFill", &json!({"color": "#b00000"})).unwrap();
+        let before = s.doc().unwrap().doc.clone();
+        let paint = s.paint.clone();
+        let undo = s.doc().unwrap().history.undo.len();
+        let selection = s.tool_options();
+        let err = s.execute("appearance.copyFrom", &json!({"source": src.0})).unwrap_err();
+        assert!(err.to_string().contains("object transparency"), "{err}");
+        assert_eq!(s.doc().unwrap().doc, before);
+        assert_eq!(s.paint, paint);
+        assert_eq!(s.doc().unwrap().history.undo.len(), undo);
+        assert_eq!(s.tool_options(), selection);
+        // An explicit opt-out samples the range while retaining the object's transparency.
+        s.execute("appearance.copyFrom", &json!({"source": src.0, "apply": {"appearance": {"transparency": false}}})).unwrap();
+        let n = node(&s, dst);
+        assert_eq!((n.opacity, n.blend), (before.node(dst).unwrap().opacity, before.node(dst).unwrap().blend));
+        let NodeKind::Text(t) = n.kind else { panic!("not text") };
+        assert_eq!(t.runs[0].text, "MAMA");
+        assert_eq!(t.runs[0].style.fill.color().unwrap().to_hex(), "#00ff00");
+        let NodeKind::Text(old) = &before.node(dst).unwrap().kind else { panic!("not text") };
+        assert_eq!(t.runs[1].text, " NA KAZI");
+        assert_eq!(t.runs[1].style, old.runs.last().unwrap().style);
+        s.execute("edit.undo", &json!({})).unwrap();
+        assert_eq!(s.doc().unwrap().doc, before);
+    }
+}
+
+/// Choosing the Eyedropper from highlighted type must preserve the character target.
+#[test]
+fn eyedropper_styles_only_highlighted_characters() {
+    let mut s = session();
+    s.prefs.placeholder_text = false;
+    let src = id_of(s.execute("text.create", &json!({"x": 300, "y": 100, "text": "Source"})).unwrap());
+    s.execute("text.setStyle", &json!({"font": "Inter", "size": 30, "fill": "#00ff00"})).unwrap();
+    let view = ViewInfo::default();
+    s.select_tool("type", view).unwrap();
+    for kind in [PointerKind::Down, PointerKind::Up] {
+        s.pointer(&PointerEvent::new(kind, 20.0, 300.0), view).unwrap();
+    }
+    let dst = s.doc().unwrap().selection.objects[0];
+    s.tool_text("MAMA NA KAZI", view).unwrap();
+    s.set_tool_option("select", &json!({"start": 0, "end": 4}));
+    let before = match node(&s, dst).kind {
+        NodeKind::Text(t) => t.first_style(),
+        _ => panic!(),
+    };
+    s.select_tool("eyedropper", view).unwrap();
+    s.execute("appearance.copyFrom", &json!({"source": src.0})).unwrap();
+    let NodeKind::Text(t) = node(&s, dst).kind else { panic!() };
+    assert_eq!(t.runs.len(), 2, "only MAMA takes the sampled style");
+    assert_eq!(t.runs[0].text, "MAMA");
+    assert_eq!(t.runs[0].style.size, 30.0);
+    assert_eq!(t.runs[0].style.fill.color().unwrap().to_hex(), "#00ff00");
+    assert_eq!(t.runs[1].text, " NA KAZI");
+    assert_eq!(t.runs[1].style, before);
+    s.execute("edit.undo", &json!({})).unwrap();
+    let NodeKind::Text(t) = node(&s, dst).kind else { panic!() };
+    assert_eq!(t.plain_text(), "MAMA NA KAZI", "undo keeps the separate typing step");
+    assert_eq!(t.runs[0].style, before);
+    s.execute("edit.redo", &json!({})).unwrap();
+    s.select_tool("type", view).unwrap();
+    assert_eq!(s.tool_options()["editing"], dst.0);
+    assert_eq!((s.tool_options()["start"].as_u64(), s.tool_options()["end"].as_u64()), (Some(0), Some(4)));
+}
+
+/// Color-only sampling preserves multibyte ranges and clears stale targets on deselection.
+#[test]
+fn eyedropper_shift_color_preserves_other_characters_and_clears_on_deselect() {
+    let mut s = session();
+    s.prefs.placeholder_text = false;
+    let src = rect(&mut s, 300.0);
+    s.execute("paint.setFill", &json!({"color": "#00ff00"})).unwrap();
+    s.execute("select.none", &json!({})).unwrap();
+    s.execute("paint.setFill", &json!({"color": "#b00000"})).unwrap();
+    let view = ViewInfo::default();
+    s.select_tool("type", view).unwrap();
+    for kind in [PointerKind::Down, PointerKind::Up] {
+        s.pointer(&PointerEvent::new(kind, 20.0, 300.0), view).unwrap();
+    }
+    let dst = s.doc().unwrap().selection.objects[0];
+    s.tool_text("Aé中Z", view).unwrap();
+    s.set_tool_option("select", &json!({"start": 1, "end": 6}));
+    let NodeKind::Text(before) = node(&s, dst).kind else { panic!() };
+    click(&mut s, 325.0, 35.0, Mods { shift: true, ..Default::default() });
+    let NodeKind::Text(t) = node(&s, dst).kind else { panic!() };
+    assert_eq!(t.runs.iter().map(|r| r.text.as_str()).collect::<Vec<_>>(), ["A", "é中", "Z"]);
+    assert_eq!(t.runs[0].style, before.first_style());
+    assert_eq!(t.runs[2].style, before.first_style());
+    assert_eq!(t.runs[1].style.fill.color().unwrap().to_hex(), "#00ff00");
+    assert_eq!(t.runs[1].style.size, before.first_style().size);
+    assert!(s.overlays(view).iter().any(|o| matches!(o, vectorcraft_tools::Overlay::Highlight { .. })), "the highlighted range remains visible");
+    s.execute("select.none", &json!({})).unwrap();
+    assert!(s.tool_options().get("editing").is_none_or(Value::is_null));
+    s.execute("select.set", &json!({"ids": [dst.0]})).unwrap();
+    s.execute("appearance.copyFrom", &json!({"source": src.0})).unwrap();
+    let NodeKind::Text(t) = node(&s, dst).kind else { panic!() };
+    assert!(
+        t.runs.iter().all(|r| r.style.fill.color().unwrap().to_hex() == "#00ff00"),
+        "after deselecting, ordinary object sampling styles the whole object"
+    );
+}

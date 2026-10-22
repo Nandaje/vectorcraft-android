@@ -1063,6 +1063,11 @@
 	Fidelity:	Точність:
 	Figure Space	Цифрова шпація
 	Figure:	Цифри:
+# Artwork drag between document tabs.
+	Drop Artwork	Розмістити графіку
+@msg	{key} must be [x, y] with finite coordinates	{key} має бути [x, y] зі скінченними координатами
+@msg	ids must contain 1–10000 object ids	ids має містити від 1 до 10000 ідентифікаторів об’єктів
+
 	File	Файл
 	File Dimensions	Розміри файлу
 	File Format:	Формат файлу:
@@ -2417,6 +2422,7 @@ mark-style	Japanese	Японський
 	Proof Setup	Налаштування кольоропроби
 	Properties	Властивості
 	Proportional Metrics	Пропорційні метрики
+	Character Direction	Напрямок символів
 	Digits	Цифри
 	Arabic	Арабські
 	Hindi	Гінді
@@ -4012,7 +4018,7 @@ axis	Both	Обидві
 @msg	give the path `id` and the width point `index`	вкажіть `id` контуру та `index` точки ширини
 @msg	guides are locked	напрямні заблоковані
 @msg	handle must be in or out	handle має бути in або out
-@msg	image '{key}' has no pixels and was left out	зображення '{key}' не має пікселів і було пропущено
+@msg	an image has no pixels and was left out	зображення без пікселів пропущено
 @msg	image data `{_1}` is missing	дані зображення `{_1}` відсутні
 @msg	image would be too large; lower the resolution	зображення буде завеликим; зменште роздільну здатність
 @msg	index must be a number or first, previous, next or last	index має бути числом або first, previous, next, last
@@ -4581,6 +4587,7 @@ axis	Both	Обидві
 	Activate Panel	Активувати панель
 	Change Panel Layout	Змінити розташування панелей
 	Close Panel	Закрити панель
+	Collapse Panel Group	Згорнути групу панелей
 	Move Panel	Перемістити панель
 	Group with	Згрупувати з
 	Resize panels	Змінити розмір панелей
@@ -4591,6 +4598,12 @@ axis	Both	Обидві
 @msg	before must name a panel	before має вказувати панель
 @msg	docking action contains an unknown panel or an excessive split path	Дія прикріплення містить невідому панель або надто довгий шлях поділів
 @msg	group must be true or false	group має мати значення true або false
+@msg	panel floats; collapse its group with window.panel.float {panel, collapsed}	панель від’єднана; згорніть її групу через window.panel.float {panel, collapsed}
+@msg	panel is not in a dock group	панель не входить до групи дока
+@msg	only a dock group above or below others collapses, not one beside another	згорнути можна лише групу дока над або під іншими, а не поруч з ними
+@msg	icon must be true or false	icon має бути true або false
+@msg	icon only docks a panel in the icon column, with no anchor	icon лише закріплює панель у стовпці значків, без anchor
+@msg	column docks a set as a dock column, with no anchor or icon	column закріплює набір як стовпець дока, без anchor та icon
 @msg	move requires a destination panel	Для переміщення потрібна цільова панель
 @msg	move requires an existing destination panel	Для переміщення потрібна наявна цільова панель
 @msg	onto must name a floating panel	onto має вказувати плаваючу панель
@@ -4866,6 +4879,8 @@ lighting	Light	Світло
 	Sketch	Ескіз
 	Halftone Pattern…	Напівтоновий візерунок…
 	Halftone Pattern	Напівтоновий візерунок
+	Torn Edges…	Порвані краї…
+	Torn Edges	Порвані краї
 	Pattern Type	Тип візерунка
 	Dot	Крапка
 # User Interface › Color Scheme
@@ -4917,9 +4932,11 @@ lighting	Light	Світло
 @msg	Persistent libraries not found: {files}	Постійні бібліотеки не знайдено: {files}
 @msg	`{given}` isn't a library panel (see window.swatchLibrary)	`{given}` — не панель бібліотеки (див. window.swatchLibrary)
 @msg	library panel `{given}` isn't open	панель бібліотеки `{given}` не відкрита
+@msg	library panel `{given}` isn't missing its library	бібліотека панелі бібліотеки `{given}` не відсутня
 @msg	too many library panels were opened in this session	у цьому сеансі відкрито забагато панелей бібліотек
 @msg	The image is {_1} × {_2} pixels, more than {LARGE_TRACE_SIDE} on a side: it is traced, but more slowly. A lower-fidelity preset or a smaller copy of the image traces faster.	Зображення {_1} × {_2} пікселів, понад {LARGE_TRACE_SIDE} з одного боку: трасування виконується, але повільніше. Стиль із нижчою точністю або менша копія зображення трасуються швидше.
 @msg	The image was traced at {_1} × {_2} pixels, scaled down from {_3} × {_4} ({_5} megapixels at most).	Зображення трасовано в розмірі {_1} × {_2} пікселів, зменшене з {_3} × {_4} (щонайбільше {_5} мегапікселів).
+	Gap Length:	Довжина проміжку:
 	Artboard {n} of {total}	Монтажна область {n} з {total}
 	Encoding and writing the file…	Кодування та запис файлу…
 @plural	{n} more export waiting|{n} more exports waiting	Ще {n} експорт в очікуванні|Ще {n} експорти в очікуванні|Ще {n} експортів в очікуванні
@@ -4937,6 +4954,14 @@ lighting	Light	Світло
 	Minimum must not exceed Desired, nor Desired Maximum.	Мінімум не може перевищувати бажане значення, а бажане — максимум.
 	Minimum	Мінімум
 	Justification	Вирівнювання за шириною
+	Add filters from the list above	Додайте фільтри зі списку вище
+	Add to Stack	Додати до стека
+	Applied Filters	Застосовані фільтри
+	Categories	Категорії
+	Choose a filter	Виберіть фільтр
+	Effect Gallery	Галерея ефектів
+	Filters	Фільтри
+	Select artwork to apply effects	Виберіть графіку, щоб застосувати ефекти
 @msg	the file's variables and data sets weren't read (variables: {variables}, data sets: {data_sets}): the Variables panel doesn't list them	змінні та набори даних файлу не прочитано (змінних: {variables}, наборів даних: {data_sets}): панель «Змінні» їх не показує
 # Select by Color (select.color)
 	Select by Color	Виділити за кольором
@@ -4962,3 +4987,13 @@ lighting	Light	Світло
 	Water Paper	Мокрий папір
 	Ruby…	Рубі…
 	Ruby	Рубі
+	Ease In	Плавний початок
+	Ease Out	Плавне завершення
+	Ease In Out	Плавний початок і завершення
+	Ease Out In	Плавне завершення і початок
+	Ramp:	Сила:
+	Shift:	Зсув:
+	Fresco…	Фреска…
+	Fresco	Фреска
+	Effect Gallery…	Галерея ефектів…
+	Effect Gallery Dialog	Діалог «Галерея ефектів»

@@ -634,6 +634,16 @@ mod tests {
     }
 
     #[test]
+    fn recolor_dialog_keeps_the_default_model_without_an_extra_dropdown() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        app.run("file.new", json!({"width": 100, "height": 100})).unwrap();
+        app.run("ui.recolorDialog", json!({"colors": ["#ff8000"]})).unwrap();
+        let d = app.ui.dialog.as_ref().unwrap();
+        assert!(!d.fields.contains_key("model"));
+        assert!(apply_params(d).get("model").is_none());
+    }
+
+    #[test]
     fn merge_and_separate_rows() {
         let mut r = rows();
         merge(&mut r, &[2, 0]);

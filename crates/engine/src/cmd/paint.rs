@@ -351,6 +351,7 @@ pub(crate) fn paint_from(s: &Session, p: &Value) -> Result<Option<Paint>> {
         };
     }
     if let Some(g) = p.get("gradient") {
+        check_numbers(g, &["angle"], "paint")?;
         // A stop naming a process swatch keeps the swatch's model.
         let stored = super::gradient::stop_colors(s, p, g);
         let g = super::gradient::link_stops(&s.doc()?.doc, g).map_err(|e| bad("paint", e))?;

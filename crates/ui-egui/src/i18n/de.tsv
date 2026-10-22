@@ -1046,6 +1046,11 @@
 	Fidelity:	Genauigkeit:
 	Figure Space	Ziffernleerzeichen
 	Figure:	Ziffern:
+# Artwork drag between document tabs.
+	Drop Artwork	Grafik ablegen
+@msg	{key} must be [x, y] with finite coordinates	{key} muss [x, y] mit endlichen Koordinaten sein
+@msg	ids must contain 1–10000 object ids	ids muss 1–10000 Objekt-IDs enthalten
+
 	File	Datei
 	File Dimensions	Dateiabmessungen
 	File Format:	Dateiformat:
@@ -2360,6 +2365,7 @@ mark-style	Japanese	Japanisch
 	Proof Setup	Proof einrichten
 	Properties	Eigenschaften
 	Proportional Metrics	Proportionale Metrik
+	Character Direction	Zeichenrichtung
 	Digits	Ziffern
 	Arabic	Arabisch
 	Hindi	Hindi
@@ -3912,7 +3918,7 @@ theme	Appearance	Erscheinungsbild
 @msg	give the path `id` and the width point `index`	geben Sie die `id` des Pfads und den `index` des Breitenpunkts an
 @msg	guides are locked	die Hilfslinien sind gesperrt
 @msg	handle must be in or out	handle muss in oder out sein
-@msg	image '{key}' has no pixels and was left out	das Bild '{key}' hat keine Pixel und wurde ausgelassen
+@msg	an image has no pixels and was left out	ein Bild ohne Pixel wurde ausgelassen
 @msg	image data `{_1}` is missing	die Bilddaten `{_1}` fehlen
 @msg	image would be too large; lower the resolution	das Bild wäre zu groß; verringern Sie die Auflösung
 @msg	index must be a number or first, previous, next or last	index muss eine Zahl oder first, previous, next oder last sein
@@ -4554,6 +4560,7 @@ theme	Appearance	Erscheinungsbild
 	Activate Panel	Bedienfeld aktivieren
 	Change Panel Layout	Bedienfeldanordnung ändern
 	Close Panel	Bedienfeld schließen
+	Collapse Panel Group	Bedienfeldgruppe minimieren
 	Move Panel	Bedienfeld verschieben
 	Group with	Gruppieren mit
 	Resize panel window	Bedienfeldfenster skalieren
@@ -4564,6 +4571,12 @@ theme	Appearance	Erscheinungsbild
 @msg	before must name a panel	before muss ein Bedienfeld benennen
 @msg	docking action contains an unknown panel or an excessive split path	Die Docking-Aktion enthält ein unbekanntes Bedienfeld oder einen zu langen Teilungspfad
 @msg	group must be true or false	group muss true oder false sein
+@msg	panel floats; collapse its group with window.panel.float {panel, collapsed}	Bedienfeld ist abgelöst; seine Gruppe mit window.panel.float {panel, collapsed} minimieren
+@msg	panel is not in a dock group	Bedienfeld ist in keiner Dock-Gruppe
+@msg	only a dock group above or below others collapses, not one beside another	nur eine Dock-Gruppe über oder unter anderen lässt sich minimieren, nicht eine daneben
+@msg	icon must be true or false	icon muss true oder false sein
+@msg	icon only docks a panel in the icon column, with no anchor	icon dockt ein Bedienfeld nur in der Symbolspalte an, ohne anchor
+@msg	column docks a set as a dock column, with no anchor or icon	column dockt einen Satz als Dock-Spalte an, ohne anchor oder icon
 @msg	move requires a destination panel	Das Verschieben erfordert ein Zielbedienfeld
 @msg	move requires an existing destination panel	Das Verschieben erfordert ein vorhandenes Zielbedienfeld
 @msg	onto must name a floating panel	onto muss ein schwebendes Bedienfeld benennen
@@ -4851,6 +4864,8 @@ effect	Soft	Weich
 	Sketch	Zeichenfilter
 	Halftone Pattern…	Rasterungseffekt…
 	Halftone Pattern	Rasterungseffekt
+	Torn Edges…	Zerrissene Kanten…
+	Torn Edges	Zerrissene Kanten
 	Pattern Type	Musterart
 	Dot	Punkt
 # User Interface › Color Scheme
@@ -4903,9 +4918,11 @@ effect	Soft	Weich
 @msg	Persistent libraries not found: {files}	Dauerhafte Bibliotheken nicht gefunden: {files}
 @msg	`{given}` isn't a library panel (see window.swatchLibrary)	`{given}` ist kein Bibliotheksbedienfeld (siehe window.swatchLibrary)
 @msg	library panel `{given}` isn't open	Bibliotheksbedienfeld `{given}` ist nicht geöffnet
+@msg	library panel `{given}` isn't missing its library	dem Bibliotheksbedienfeld `{given}` fehlt seine Bibliothek nicht
 @msg	too many library panels were opened in this session	in dieser Sitzung wurden zu viele Bibliotheksbedienfelder geöffnet
 @msg	The image is {_1} × {_2} pixels, more than {LARGE_TRACE_SIDE} on a side: it is traced, but more slowly. A lower-fidelity preset or a smaller copy of the image traces faster.	Das Bild hat {_1} × {_2} Pixel, mehr als {LARGE_TRACE_SIDE} auf einer Seite: Es wird nachgezeichnet, aber langsamer. Eine Vorgabe mit geringerer Detailtreue oder eine kleinere Kopie des Bildes geht schneller.
 @msg	The image was traced at {_1} × {_2} pixels, scaled down from {_3} × {_4} ({_5} megapixels at most).	Das Bild wurde mit {_1} × {_2} Pixeln nachgezeichnet, verkleinert von {_3} × {_4} (höchstens {_5} Megapixel).
+	Gap Length:	Lückenlänge:
 	Artboard {n} of {total}	Zeichenfläche {n} von {total}
 	Encoding and writing the file…	Datei wird codiert und geschrieben…
 @plural	{n} more export waiting|{n} more exports waiting	{n} weiterer Export wartet|{n} weitere Exporte warten
@@ -4923,6 +4940,14 @@ effect	Soft	Weich
 	Minimum must not exceed Desired, nor Desired Maximum.	Das Minimum darf den optimalen Wert nicht übersteigen, der optimale Wert nicht das Maximum.
 	Minimum	Minimum
 	Justification	Abstände
+	Add filters from the list above	Filter aus der Liste oben hinzufügen
+	Add to Stack	Zum Stapel hinzufügen
+	Applied Filters	Angewendete Filter
+	Categories	Kategorien
+	Choose a filter	Filter wählen
+	Effect Gallery	Effekt-Galerie
+	Filters	Filter
+	Select artwork to apply effects	Wählen Sie Grafik aus, um Effekte anzuwenden
 @msg	the file's variables and data sets weren't read (variables: {variables}, data sets: {data_sets}): the Variables panel doesn't list them	die Variablen und Datensätze der Datei wurden nicht gelesen (Variablen: {variables}, Datensätze: {data_sets}): Das Bedienfeld „Variablen“ listet sie nicht auf
 # Select by Color (select.color)
 	Select by Color	Nach Farbe auswählen
@@ -4948,3 +4973,13 @@ effect	Soft	Weich
 	Water Paper	Feuchtes Papier
 	Ruby…	Ruby…
 	Ruby	Ruby
+	Ease In	Langsam starten
+	Ease Out	Langsam enden
+	Ease In Out	Langsam starten und enden
+	Ease Out In	Langsam enden und starten
+	Ramp:	Stärke:
+	Shift:	Verschiebung:
+	Fresco…	Fresko…
+	Fresco	Fresko
+	Effect Gallery…	Effekt-Galerie…
+	Effect Gallery Dialog	Dialogfeld „Effekt-Galerie“

@@ -803,6 +803,18 @@ impl Tool for TypeTool {
     /// `commitTyping` (the caller commits the engine interaction).
     fn set_option(&mut self, key: &str, v: &Value) {
         match key {
+            // Transient selection transferred between Type and Eyedropper; never a saved setting.
+            "textSelection" => {
+                if let (Some(id), Some(a), Some(b)) = (
+                    v.get("editing").and_then(Value::as_u64),
+                    v.get("anchor").or_else(|| v.get("start")).and_then(Value::as_u64),
+                    v.get("caret").or_else(|| v.get("end")).and_then(Value::as_u64),
+                ) && let (Ok(a), Ok(b)) = (usize::try_from(a), usize::try_from(b))
+                {
+                    self.start_editing(NodeId(id), b);
+                    self.anchor = a;
+                }
+            }
             "prevTool" | "previousTool" => {
                 self.prev_tool = v.as_str().map(String::from);
             }

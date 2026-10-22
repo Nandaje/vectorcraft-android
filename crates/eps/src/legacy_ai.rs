@@ -98,7 +98,10 @@ const STROKES: &str =
     "strokes a plain line can't draw (inside or outside the path, variable width, gradients, brushes, arrowheads) are written as filled outlines";
 const IMAGE_ALPHA: &str = "transparent image pixels are written over white";
 const LIVE: &str = "symbols, blends, envelopes, meshes, repeats, placed documents and intertwines are written as their art";
-const UNREADABLE_IMAGE: &str = "an image that can't be decoded or is too large was left out";
+/// The warning for an image left out because it can't be decoded: the note raster exports give
+/// (`vectorcraft-engine`'s `rasterfx::undecoded_warning`).
+const UNDECODED: &str = "an image couldn't be decoded and is missing from the picture";
+const LARGE_IMAGE: &str = "an image that is empty or too large for legacy .ai was left out";
 const ELLIPTICAL: &str = "elliptical radial gradients are written circular";
 
 /// What to write in the header, and how to write what the format can't hold.
@@ -1302,13 +1305,18 @@ impl<'a> Writer<'a> {
         if !invertible(m) {
             return;
         }
-        let Some(img) = self.doc.images.get(&im.key).and_then(|b| image::load_from_memory(&b.bytes).ok()) else {
-            self.warn(UNREADABLE_IMAGE);
+        let blob = self.doc.images.get(&im.key);
+        if blob.is_some_and(|b| b.bytes.is_empty()) {
+            self.warn(LARGE_IMAGE);
+            return;
+        }
+        let Some(img) = blob.and_then(|b| image::load_from_memory(&b.bytes).ok()) else {
+            self.warn(UNDECODED);
             return;
         };
         let (w, h) = (img.width(), img.height());
         if w == 0 || h == 0 || u64::from(w) * u64::from(h) > MAX_IMAGE_PIXELS {
-            self.warn(UNREADABLE_IMAGE);
+            self.warn(LARGE_IMAGE);
             return;
         }
         // The object places the image's own pixel grid (its width × height) wherever the file's is.

@@ -279,7 +279,7 @@ impl PatternDef {
         out
     }
     /// Offsets of the pattern-editing preview copies (`copies`×`copies` around the tile, the
-    /// centre `(0, 0)` excluded).
+    /// centre `(0, 0)` excluded), in row-major order (not paint order).
     pub fn preview_offsets(&self) -> Vec<Vec2> {
         let k = (self.copies.clamp(1, 15) / 2) as i64;
         let mut out = vec![];
@@ -291,6 +291,38 @@ impl PatternDef {
             }
         }
         out
+    }
+    /// Offsets of every pattern-editing preview copy, including the centre tile, in the same paint
+    /// order [`offsets_covering`] uses for [`Overlap`].
+    pub fn preview_offsets_in_paint_order(&self) -> Vec<Vec2> {
+        let k = (self.copies.clamp(1, 15) / 2) as i64;
+        let (i0, i1, j0, j1) = (-k, k, -k, k);
+        let mut out = vec![];
+        let rows: Vec<i64> = if self.overlap.bottom_in_front { (j0..=j1).collect() } else { (j0..=j1).rev().collect() };
+        for &j in &rows {
+            let cols: Vec<i64> = if self.overlap.right_in_front { (i0..=i1).collect() } else { (i0..=i1).rev().collect() };
+            for i in cols {
+                out.push(self.offset(i, j));
+            }
+        }
+        out
+    }
+    /// Preview copies drawn before and after the centre tile in [`Self::preview_offsets_in_paint_order`],
+    /// for one dimmed composite each (the centre tile is drawn at full strength between them).
+    pub fn preview_offsets_dimmed_sides(&self) -> (Vec<Vec2>, Vec<Vec2>) {
+        let mut before = vec![];
+        let mut after = vec![];
+        let mut past_center = false;
+        for o in self.preview_offsets_in_paint_order() {
+            if o.x == 0.0 && o.y == 0.0 {
+                past_center = true;
+            } else if past_center {
+                after.push(o);
+            } else {
+                before.push(o);
+            }
+        }
+        (before, after)
     }
     /// Instances covering `region` (document space) as plain nodes for a pattern painted with
     /// `paint_xf` (pattern space → document), fresh-id-less (id 0). Used by exporters and Distort
@@ -742,6 +774,20 @@ mod tests {
         for id in TileType::IDS {
             assert_eq!(TileType::parse(id, None).unwrap().id(), id);
         }
+    }
+
+    #[test]
+    fn preview_paint_order_respects_overlap() {
+        let mut def = PatternDef::new("p", vec![sq(0.0, 0.0, 10.0)]);
+        def.copies = 3;
+        assert!(close(*def.preview_offsets_in_paint_order().last().unwrap(), Vec2::new(-10.0, -10.0)));
+        let mut d2 = def.clone();
+        d2.overlap = Overlap { right_in_front: true, bottom_in_front: true };
+        assert!(close(*d2.preview_offsets_in_paint_order().last().unwrap(), Vec2::new(10.0, 10.0)));
+        assert_eq!(def.preview_offsets_in_paint_order().len(), 9);
+        let (before, after) = def.preview_offsets_dimmed_sides();
+        assert_eq!(before.len() + after.len(), 8);
+        assert!(before.iter().all(|o| *o != Vec2::ZERO) && after.iter().all(|o| *o != Vec2::ZERO));
     }
 
     #[test]

@@ -351,6 +351,12 @@ impl FaceMerger {
         Self { arr: if has_open { None } else { arrangement(shapes) }, shapes: shapes.len(), lines, snap: std::cell::OnceCell::new() }
     }
 
+    /// Merge faces found with Gap Detection using the same temporary bridges as Live Paint.
+    /// Source indices stay those of the original inputs; bridges have no fill and are never art.
+    pub fn with_gap(shapes: &[Shape], gap: f64) -> Self {
+        Self::new(&crate::planar::gap_inputs(shapes, gap))
+    }
+
     /// The union of `faces`.
     pub fn merge(&self, faces: &[&Region]) -> PathData {
         self.exact(faces).or_else(|| self.planar(faces)).filter(|p| !p.is_empty()).unwrap_or_else(|| merge_regions(faces))

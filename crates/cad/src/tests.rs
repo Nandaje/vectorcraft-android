@@ -527,6 +527,24 @@ fn images_link_png_or_jpeg_files() {
 }
 
 #[test]
+fn images_without_pixels_are_left_out_with_one_note() {
+    // One image has no data in the document, and the other image's data is empty.
+    let mut d = doc_with(|d| {
+        ["raster-1", "raster-2"]
+            .into_iter()
+            .map(|key| {
+                let im = ImageObject { key: key.into(), width: 4, height: 2, xf: Affine::IDENTITY, link: None, placement: Default::default() };
+                Node::new(d.alloc_id(), NodeKind::Image(Box::new(im)))
+            })
+            .collect()
+    });
+    d.images.insert("raster-2".into(), ImageBlob { mime: "image/png".into(), bytes: Arc::new(vec![]), proxy: None });
+    let out = export(&d, &opts(&d)).unwrap();
+    assert!(entities(&out).is_empty() && out.images.is_empty());
+    assert_eq!(out.warnings, ["an image has no pixels and was left out"]);
+}
+
+#[test]
 fn crop_leaves_out_art_outside_the_region() {
     let d = shapes_doc();
     // Only the ellipse (120..180) reaches into 115..200.

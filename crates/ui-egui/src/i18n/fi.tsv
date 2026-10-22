@@ -42,6 +42,11 @@
 	Medium Light	Keskivaalea
 	Light	Vaalea
 	Quit VectorCraft	Lopeta VectorCraft
+# Artwork drag between document tabs.
+	Drop Artwork	Pudota kuvitus
+@msg	{key} must be [x, y] with finite coordinates	{key} on annettava muodossa [x, y] äärellisillä koordinaateilla
+@msg	ids must contain 1–10000 object ids	ids-arvon on sisällettävä 1–10000 objektitunnusta
+
 	File	Tiedosto
 	New…	Uusi…
 	New Without Dialog	Uusi ilman valintaikkunaa
@@ -812,6 +817,7 @@
 	Activate Panel	Aktivoi paneeli
 	Change Panel Layout	Muuta paneelien asettelua
 	Close Panel	Sulje paneeli
+	Collapse Panel Group	Kutista paneeliryhmä
 	Move Panel	Siirrä paneelia
 	Group with	Ryhmitä kohteen kanssa
 	Resize panels	Muuta paneelien kokoa
@@ -1368,6 +1374,7 @@ lighting	Light	Valo
 	Leading	Riviväli
 	No Break	Ei katkoa
 	Proportional Metrics	Suhteelliset metriikat
+	Character Direction	Merkkien suunta
 	Digits	Numerot
 	Arabic	Arabia
 	Hindi	Hindi
@@ -4205,7 +4212,7 @@ imageTrace	Outline	Ääriviiva
 @msg	give the path `id` and the width point `index`	anna polun `id` ja leveyspisteen `index`
 @msg	guides are locked	apuviivat on lukittu
 @msg	handle must be in or out	handle-arvon on oltava in tai out
-@msg	image '{key}' has no pixels and was left out	kuvassa '{key}' ei ole pikseleitä, joten se jätettiin pois
+@msg	an image has no pixels and was left out	kuva, jossa ei ole pikseleitä, jätettiin pois
 @msg	image data `{_1}` is missing	kuvan data `{_1}` puuttuu
 @msg	image would be too large; lower the resolution	kuvasta tulisi liian suuri; pienennä tarkkuutta
 @msg	index must be a number or first, previous, next or last	indeksin on oltava luku tai first, previous, next tai last
@@ -4661,6 +4668,12 @@ imageTrace	Outline	Ääriviiva
 @msg	before must name a panel	before-arvon on nimettävä paneeli
 @msg	docking action contains an unknown panel or an excessive split path	telakointitoiminto sisältää tuntemattoman paneelin tai liian pitkän jakopolun
 @msg	group must be true or false	group-arvon on oltava true tai false
+@msg	panel floats; collapse its group with window.panel.float {panel, collapsed}	paneeli kelluu; kutista sen ryhmä komennolla window.panel.float {panel, collapsed}
+@msg	panel is not in a dock group	paneeli ei ole telakkaryhmässä
+@msg	only a dock group above or below others collapses, not one beside another	vain muiden ylä- tai alapuolella oleva telakkaryhmä kutistuu, ei toisen vieressä oleva
+@msg	icon must be true or false	icon-arvon on oltava true tai false
+@msg	icon only docks a panel in the icon column, with no anchor	icon telakoi paneelin vain kuvakesarakkeeseen, ilman anchor-arvoa
+@msg	column docks a set as a dock column, with no anchor or icon	column telakoi joukon telakkasarakkeeksi, ilman anchor- tai icon-arvoa
 @msg	move requires a destination panel	siirto vaatii kohdepaneelin
 @msg	move requires an existing destination panel	siirto vaatii olemassa olevan kohdepaneelin
 @msg	onto must name a floating panel	onto-arvon on nimettävä kelluva paneeli
@@ -5236,6 +5249,8 @@ mark-style	Japanese	Japanilainen
 	Sketch	Luonnos
 	Halftone Pattern…	Rasterikuvio…
 	Halftone Pattern	Rasterikuvio
+	Torn Edges…	Repeytyneet reunat…
+	Torn Edges	Repeytyneet reunat
 	Pattern Type	Kuviotyyppi
 	Dot	Piste
 # User Interface › Color Scheme
@@ -5287,9 +5302,11 @@ mark-style	Japanese	Japanilainen
 @msg	Persistent libraries not found: {files}	Pysyviä kirjastoja ei löytynyt: {files}
 @msg	`{given}` isn't a library panel (see window.swatchLibrary)	`{given}` ei ole kirjastopaneeli (katso window.swatchLibrary)
 @msg	library panel `{given}` isn't open	kirjastopaneeli `{given}` ei ole auki
+@msg	library panel `{given}` isn't missing its library	kirjastopaneelin `{given}` kirjasto ei puutu
 @msg	too many library panels were opened in this session	tässä istunnossa on avattu liian monta kirjastopaneelia
 @msg	The image is {_1} × {_2} pixels, more than {LARGE_TRACE_SIDE} on a side: it is traced, but more slowly. A lower-fidelity preset or a smaller copy of the image traces faster.	Kuva on {_1} × {_2} kuvapistettä, yhdeltä sivultaan yli {LARGE_TRACE_SIDE}: se jäljitetään, mutta hitaammin. Pienemmän tarkkuuden esiasetus tai kuvan pienempi kopio jäljittyy nopeammin.
 @msg	The image was traced at {_1} × {_2} pixels, scaled down from {_3} × {_4} ({_5} megapixels at most).	Kuva jäljitettiin kokoon {_1} × {_2} kuvapistettä pienennettynä koosta {_3} × {_4} (enintään {_5} megapikseliä).
+	Gap Length:	Aukon pituus:
 	Artboard {n} of {total}	Piirtoalusta {n}/{total}
 	Encoding and writing the file…	Tiedostoa koodataan ja kirjoitetaan…
 @plural	{n} more export waiting|{n} more exports waiting	{n} vienti odottaa|{n} vientiä odottaa
@@ -5306,6 +5323,14 @@ mark-style	Japanese	Japanilainen
 	Full Justify	Täysi tasaus
 	Minimum must not exceed Desired, nor Desired Maximum.	Minimi ei saa ylittää haluttua arvoa eikä haluttu arvo maksimia.
 	Justification	Tasaus
+	Add filters from the list above	Lisää suodattimia yllä olevasta luettelosta
+	Add to Stack	Lisää pinoon
+	Applied Filters	Käytetyt suodattimet
+	Categories	Luokat
+	Choose a filter	Valitse suodatin
+	Effect Gallery	Tehostegalleria
+	Filters	Suodattimet
+	Select artwork to apply effects	Valitse grafiikka, johon tehosteet otetaan
 @msg	the file's variables and data sets weren't read (variables: {variables}, data sets: {data_sets}): the Variables panel doesn't list them	tiedoston muuttujia ja tietojoukkoja ei luettu (muuttujia: {variables}, tietojoukkoja: {data_sets}): Muuttujat-paneeli ei näytä niitä
 # Select by Color (select.color)
 	Select by Color	Valitse värin mukaan
@@ -5398,3 +5423,13 @@ swatch	Bright Violet	Kirkas violetti
 	Water Paper	Märkä paperi
 	Ruby…	Ruby…
 	Ruby	Ruby
+	Ease In	Hidas alku
+	Ease Out	Hidas loppu
+	Ease In Out	Hidas alku ja loppu
+	Ease Out In	Hidas loppu ja alku
+	Ramp:	Voimakkuus:
+	Shift:	Siirtymä:
+	Fresco…	Fresko…
+	Fresco	Fresko
+	Effect Gallery…	Tehostegalleria…
+	Effect Gallery Dialog	Tehostegalleria-valintaikkuna

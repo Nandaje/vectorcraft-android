@@ -410,16 +410,17 @@ fn with_save_extension(path: &str, f: &Format, mode: SaveMode) -> String {
 
 /// [`with_save_extension`] for a save panel that reports the file type picked in it (`picked`,
 /// that type's extension; the XDG portal's panel on Linux and the BSDs), which then takes `f`'s
-/// place. A path that still ends in the extension of the name the panel suggested (`suggested`)
-/// gets the picked type's extension instead. Without a picked type, or with one the panel did not
+/// place. A path that still ends in the extension of the name the panel suggested (`suggested`),
+/// in any letter case, gets the picked type's extension instead, unless that extension is one of
+/// the picked type's; such a path stays as typed. Without a picked type, or with one the panel did not
 /// offer, [`with_save_extension`] with `f`.
 fn with_picked_type(path: &str, suggested: &str, picked: Option<&str>, f: &Format, mode: SaveMode) -> String {
     let formats = if mode == SaveMode::Template { TEMPLATE_FORMATS } else { SAVE_FORMATS };
     let Some(g) = picked.and_then(fileio::format).filter(|g| formats.contains(&g.id)) else {
         return with_save_extension(path, f, mode);
     };
-    let has = std::path::Path::new(path).extension();
-    if has.is_some() && has == std::path::Path::new(suggested).extension() {
+    let has = fileio::extension(path);
+    if !has.is_empty() && has == fileio::extension(suggested) && !g.extensions.contains(&has.as_str()) {
         return std::path::Path::new(path).with_extension(g.extensions[0]).to_string_lossy().into_owned();
     }
     with_save_extension(path, g, mode)
@@ -486,9 +487,7 @@ pub fn save(app: &mut VectorcraftApp, mode: SaveMode, p: &Value, ask_options: bo
     if ask && asks_options(mode, chosen.format) {
         let path = chosen.path.clone().unwrap_or_default();
         let r = ask_format_options(app, mode, chosen.format, &path);
-        if let Some(d) = app.ui.dialog.as_mut() {
-            d.fields.insert(crate::dialogs::AFTER_PANEL.into(), json!(true));
-        }
+        crate::dialogs::opened_by_panel(app);
         return r;
     }
     write_plan(app, chosen)
@@ -711,6 +710,9 @@ pub fn hide_exports(app: &mut VectorcraftApp) -> Value {
 /// document keeps its path. → `{path, warnings, files?}` (`files`: every file when there are
 /// several).
 pub fn export(app: &mut VectorcraftApp, format: Option<&str>, path: Option<String>, params: &Value) -> Result<Value, String> {
+    // Options given as anything but an object are none: the path and format still reach the
+    // encoder (an exporter plug-in is told the file it writes).
+    let params = &if params.is_object() { params.clone() } else { json!({}) };
     let f = fileio::writable_format(format, path.as_deref())?;
     let st = app.session.active().ok_or("no document")?;
     let doc = match fileio::export_source(st, params).map_err(|e| e.to_string())? {

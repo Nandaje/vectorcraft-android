@@ -145,6 +145,12 @@ pub fn all_panels() -> impl Iterator<Item = (&'static str, &'static str)> {
     tabs.chain(ICON_PANELS.iter().map(|&(id, label, _)| (id, label)))
 }
 
+/// Panel `id`'s id, English label and icon if it can live in the icon column: an icon panel, or
+/// one of the tabbed group's panels dropped there.
+pub fn rail_panel(id: &str) -> Option<(&'static str, &'static str, &'static str)> {
+    ICON_PANELS.iter().find(|entry| entry.0 == id).copied().or_else(|| DockTab::from_id(id).map(DockTab::info))
+}
+
 /// Panels that live as collapsed icons in the dock (Essentials Classic).
 pub const ICON_PANELS: &[(&str, &str, &str)] = &[
     ("color", "Color", "palette"),
@@ -363,6 +369,10 @@ pub struct UiState {
     /// Panels whose saved return destination is the iconic rail.
     #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
     pub docking_icons: std::collections::BTreeSet<String>,
+    /// The panels shown by dock groups collapsed to their tabs (a double-click on a tab); a group
+    /// showing another of its panels is expanded.
+    #[serde(default, skip_serializing_if = "std::collections::BTreeSet::is_empty")]
+    pub docking_collapsed: std::collections::BTreeSet<String>,
     /// Invalidates in-flight gestures when a workspace is replaced.
     #[serde(skip)]
     pub docking_generation: u64,
@@ -428,6 +438,10 @@ pub struct UiState {
     /// User-saved workspaces (New Workspace…).
     #[serde(default)]
     pub custom_workspaces: Vec<crate::workspaces::Workspace>,
+    /// Layout changes made in a workspace since it was saved (or last reset), by workspace name:
+    /// switching back to it brings them back; Reset <name> drops them.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub workspace_changes: Vec<crate::workspaces::Workspace>,
     /// File → Open Recent Files, most recent first.
     #[serde(default)]
     pub recent_files: Vec<String>,
@@ -770,7 +784,24 @@ impl UiState {
         FloatingPanels::sanitize(&mut self.floating_panels, &mut self.toolbar_pos);
         crate::edit_toolbar::sanitize(&mut self.toolbar_edits);
         self.docking = self.docking.filter(crate::panel_docking::valid);
-        self.docking_icons.retain(|id| ICON_PANELS.iter().any(|entry| entry.0 == id));
+        // The tabbed group's panels live in the icon column too once dropped there.
+        self.docking_icons.retain(|id| rail_panel(id).is_some());
+        self.docking_collapsed = std::mem::take(&mut self.docking_collapsed)
+            .into_iter()
+            .filter(|id| crate::menus::normalize_panel(id) == Some(id.as_str()))
+            .take(64)
+            .collect();
+        // Changes kept for workspaces that still exist, under their saved spelling and one per
+        // workspace whatever the case (a hand-edited file).
+        let mut seen = std::collections::BTreeSet::new();
+        let saved: Vec<String> =
+            self.custom_workspaces.iter().map(|w| w.name.clone()).chain(crate::workspaces::builtins().into_iter().map(|w| w.name)).collect();
+        self.workspace_changes.retain_mut(|w| {
+            let Some(name) = saved.iter().find(|n| n.eq_ignore_ascii_case(&w.name)) else { return false };
+            w.name = name.clone();
+            seen.insert(name.to_ascii_lowercase())
+        });
+        self.workspace_changes.truncate(64);
         // Overrides that can't fire (modifier-only chords recorded by older versions, #487) give
         // the default back.
         self.shortcut_overrides.retain(|_, c| c.is_empty() || crate::shortcut_editor::normalize(c).is_some());
@@ -803,6 +834,7 @@ impl Default for UiState {
             docking: None,
             docking_hidden: Default::default(),
             docking_icons: Default::default(),
+            docking_collapsed: Default::default(),
             docking_generation: 0,
             dock_width: None,
             dock_width_pending: false,
@@ -829,6 +861,7 @@ impl Default for UiState {
             workspace: default_workspace(),
             touch_workspace_restore: None,
             custom_workspaces: vec![],
+            workspace_changes: vec![],
             recent_files: vec![],
             recent_fonts: vec![],
             favorite_fonts: vec![],

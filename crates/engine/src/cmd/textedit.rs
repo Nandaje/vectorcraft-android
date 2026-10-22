@@ -27,7 +27,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Character",
             [],
             None,
-            "{id? (default: the one selected type object), start?: byte, end?: byte (default: all text), font?, style?, size?: pt, leading?: pt|\"auto\", tracking?, kerning?: 1/1000 em|\"auto\", baselineShift?: pt, hScale?: %, vScale?: %, rotation?: deg, fill?: colour|\"none\", stroke?: colour|\"none\", keepModel?: bool (fill and stroke, as paint.setFill), strokeWidth?: pt, strokeOptions?: {weight?, cap?, join?, miterLimit?, align?, dash?, dashOffset?, alignDashes?} (as stroke.set: the character stroke), underline?, strikethrough?, allCaps?: bool, smallCaps?: bool, position?: \"normal\"|\"superscript\"|\"subscript\" (sizes from Document Setup), features?: [\"dlig\", \"-liga\", …], charAlign?: \"romanBaseline\"|\"emBoxTop\"|\"emBoxCenter\"|\"emBoxBottom\"|\"icfTop\"|\"icfBottom\", proportionalMetrics?: bool (full-width glyphs on the font's proportional widths: `palt` in horizontal type, `vpal` in vertical type), noBreak?: bool (Character panel menu › No Break: these characters stay on one line, including across a space inside the run), digits?: \"default\"|\"arabic\"|\"hindi\"|\"farsi\" (Character panel menu › Digits: the numeral system every digit is drawn in, whatever was typed), fontAxes?: {\"wght\": 650, …} (Character panel › Variable Font: the setting of each variation axis named, in the axis's units and clamped to its range; null: back to the style's own setting; other axes keep theirs; tags the font has no axis for are left out; a font or style change clears them; text.fontList {family, style} lists the axes)} style a character range (size/leading/baselineShift are document points and hScale includes the object transform; runs are split at the range ends) → {id, runs}",
+            "{id? (default: the one selected type object), start?: byte, end?: byte (default: all text), font?, style?, size?: pt, leading?: pt|\"auto\", tracking?, kerning?: 1/1000 em|\"auto\", baselineShift?: pt, hScale?: %, vScale?: %, rotation?: deg, fill?: colour|\"none\", stroke?: colour|\"none\", keepModel?: bool (fill and stroke, as paint.setFill), strokeWidth?: pt, strokeOptions?: {weight?, cap?, join?, miterLimit?, align?, dash?, dashOffset?, alignDashes?} (as stroke.set: the character stroke), underline?, strikethrough?, allCaps?: bool, smallCaps?: bool, position?: \"normal\"|\"superscript\"|\"subscript\" (sizes from Document Setup), features?: [\"dlig\", \"-liga\", …], charAlign?: \"romanBaseline\"|\"emBoxTop\"|\"emBoxCenter\"|\"emBoxBottom\"|\"icfTop\"|\"icfBottom\", proportionalMetrics?: bool (full-width glyphs on the font's proportional widths: `palt` in horizontal type, `vpal` in vertical type), tateChuYoko?: bool (Character panel menu › Tate-chu-yoko, with Show East Asian Options: in vertical type those characters stand side by side across one em of the column; kept on the characters and ignored in horizontal type), noBreak?: bool (Character panel menu › No Break: these characters stay on one line, including across a space inside the run), charDirection?: \"default\"|\"leftToRight\"|\"rightToLeft\" (Character panel menu › Character Direction: the characters are set left to right or right to left inside their paragraph, as a Unicode bidi embedding; default: as the bidi algorithm sets them), digits?: \"default\"|\"arabic\"|\"hindi\"|\"farsi\" (Character panel menu › Digits: the numeral system every digit is drawn in, whatever was typed), fontAxes?: {\"wght\": 650, …} (Character panel › Variable Font: the setting of each variation axis named, in the axis's units and clamped to its range; null: back to the style's own setting; other axes keep theirs; tags the font has no axis for are left out; a font or style change clears them; text.fontList {family, style} lists the axes)} style a character range (size/leading/baselineShift are document points and hScale includes the object transform; runs are split at the range ends) → {id, runs}",
             has_doc,
             set_range_style
         ),
@@ -83,7 +83,7 @@ pub fn specs() -> Vec<CommandSpec> {
             Some("Cmd+Shift+."),
             "{by?: steps (1)} type.step {attribute: size}",
             has_selection,
-            |s, p| type_step(s, &json!({"attribute": "size", "by": f64_or(p, "by", 1.0)}))
+            |s, p| type_step(s, &json!({"attribute": "size", "by": number_or(p, "by", 1.0, "type.size.increase")?}))
         ),
         cmd!(
             "type.size.decrease",
@@ -92,7 +92,7 @@ pub fn specs() -> Vec<CommandSpec> {
             Some("Cmd+Shift+,"),
             "{by?: steps (1)} type.step {attribute: size, by: -by}",
             has_selection,
-            |s, p| type_step(s, &json!({"attribute": "size", "by": -f64_or(p, "by", 1.0)}))
+            |s, p| type_step(s, &json!({"attribute": "size", "by": -number_or(p, "by", 1.0, "type.size.decrease")?}))
         ),
         cmd!(
             "type.size.increaseByFive",
@@ -179,10 +179,13 @@ fn byte_param(p: &Value, k: &str) -> Option<usize> {
     p.get(k).and_then(Value::as_u64).map(index)
 }
 
-fn range_of(p: &Value, len: usize) -> (usize, usize) {
+/// The bytes `start..end` of `p` in text of `len` bytes, clamped and ordered (without them, all of
+/// it). A `start` or `end` that is not a number or null, such as `"2"`, is an error.
+fn range_of(p: &Value, len: usize, cmd: &str) -> Result<(usize, usize)> {
+    check_numbers(p, &["start", "end"], cmd)?;
     let a = byte_param(p, "start").unwrap_or(0).min(len);
     let b = byte_param(p, "end").unwrap_or(len).min(len);
-    (a.min(b), a.max(b))
+    Ok((a.min(b), a.max(b)))
 }
 
 fn edit_range(s: &mut Session, p: &Value) -> Result<Value> {
@@ -190,7 +193,7 @@ fn edit_range(s: &mut Session, p: &Value) -> Result<Value> {
     let id = id_param(p, "id").ok_or_else(|| bad(C, "missing `id`"))?;
     let t = text_ref(s, id)?;
     let len = edit::runs_len(&t.runs);
-    let (a, b) = range_of(p, len);
+    let (a, b) = range_of(p, len, C)?;
     let styled: Option<Vec<TextRun>> = match p.get("runs") {
         None | Some(Value::Null) => None,
         Some(v) => Some(serde_json::from_value(v.clone()).map_err(|e| bad(C, format!("bad `runs`: {e}")))?),
@@ -221,9 +224,9 @@ fn get_range(s: &mut Session, p: &Value) -> Result<Value> {
     let id = id_param(p, "id").ok_or_else(|| bad("text.getRange", "missing `id`"))?;
     let t = text_ref(s, id)?;
     let len = edit::runs_len(&t.runs);
-    let (a, b) = range_of(p, len);
+    let (a, b) = range_of(p, len, "text.getRange")?;
     let mut runs = edit::slice_runs(&t.runs, a, b);
-    if p.get("effective").and_then(Value::as_bool).unwrap_or(false) {
+    if switch_or(p, "effective", false, "text.getRange")? {
         for run in &mut runs {
             run.style = t.effective_char_style(&run.style).ok_or_else(|| bad("text.getRange", "text transform is collapsed or unrepresentable"))?;
         }
@@ -256,10 +259,25 @@ pub(crate) struct CharChange {
     position: Option<vectorcraft_doc::CharPosition>,
     small_caps: Option<Option<f64>>,
     char_align: Option<vectorcraft_doc::CharAlign>,
+    char_direction: Option<Option<vectorcraft_doc::ParaDirection>>,
     proportional_metrics: Option<bool>,
+    tate_chu_yoko: Option<bool>,
     no_break: Option<bool>,
     digits: Option<vectorcraft_doc::Digits>,
     font_axes: Option<AxisChange>,
+}
+
+/// `charDirection: "default"|"leftToRight"|"rightToLeft"` → the Character Direction to set (`None`
+/// inside: Default).
+pub(crate) fn char_direction_param(p: &Value, cmd: &str) -> Result<Option<Option<vectorcraft_doc::ParaDirection>>> {
+    use vectorcraft_doc::ParaDirection;
+    let Some(v) = p.get("charDirection").filter(|v| !v.is_null()) else { return Ok(None) };
+    Ok(Some(match v.as_str() {
+        Some("default") => None,
+        Some("leftToRight") => Some(ParaDirection::LeftToRight),
+        Some("rightToLeft") => Some(ParaDirection::RightToLeft),
+        _ => return Err(bad(cmd, "`charDirection` must be \"default\", \"leftToRight\" or \"rightToLeft\"")),
+    }))
 }
 
 /// `digits: "default"|"arabic"|"hindi"|"farsi"` → the numeral system the digits are drawn in.
@@ -383,6 +401,8 @@ fn auto_or_num(p: &Value, k: &str, cmd: &str) -> Result<Option<Option<f64>>> {
 impl CharChange {
     /// `setup` gives the superscript, subscript and small caps proportions.
     pub(crate) fn parse(p: &Value, cmd: &str, setup: &vectorcraft_doc::DocSetup) -> Result<Self> {
+        check_numbers(p, &["size", "tracking", "baselineShift", "hScale", "vScale", "rotation", "strokeWidth"], cmd)?;
+        check_switches(p, &["underline", "strikethrough", "allCaps", "proportionalMetrics", "tateChuYoko", "noBreak"], cmd)?;
         let num = |k: &str| p.get(k).and_then(Value::as_f64);
         let (position, small_caps) = super::docsetup::script_params(p, setup, cmd)?;
         let flag = |k: &str| p.get(k).and_then(Value::as_bool);
@@ -415,7 +435,9 @@ impl CharChange {
             position,
             small_caps,
             char_align: char_align_param(p, cmd)?,
+            char_direction: char_direction_param(p, cmd)?,
             proportional_metrics: flag("proportionalMetrics"),
+            tate_chu_yoko: flag("tateChuYoko"),
             no_break: flag("noBreak"),
             digits: digits_param(p, cmd)?,
             font_axes: font_axes_param(p, cmd)?,
@@ -457,7 +479,9 @@ impl CharChange {
             && self.position.is_none()
             && self.small_caps.is_none()
             && self.char_align.is_none()
+            && self.char_direction.is_none()
             && self.proportional_metrics.is_none()
+            && self.tate_chu_yoko.is_none()
             && self.no_break.is_none()
             && self.digits.is_none()
             && self.font_axes.is_none()
@@ -551,8 +575,14 @@ impl CharChange {
         if let Some(v) = self.char_align {
             st.char_align = v;
         }
+        if let Some(v) = self.char_direction {
+            st.char_direction = v;
+        }
         if let Some(v) = self.proportional_metrics {
             st.proportional_metrics = v;
+        }
+        if let Some(v) = self.tate_chu_yoko {
+            st.tate_chu_yoko = v;
         }
         if let Some(v) = self.no_break {
             st.no_break = v;
@@ -627,7 +657,7 @@ fn set_range_style(s: &mut Session, p: &Value) -> Result<Value> {
     let protect = s.prefs.missing_glyph_protection && (change.font.is_some() || change.style.is_some());
     let t = text_ref(s, id)?;
     change.localize(&t, C)?;
-    let (a, b) = range_of(p, edit::runs_len(&t.runs));
+    let (a, b) = range_of(p, edit::runs_len(&t.runs), C)?;
     let n = s.edit("Character", |d, _| {
         let t = text_mut(d, id).ok_or(EngineError::NoNode(id))?;
         if a == b && !t.plain_text().is_empty() {
@@ -657,6 +687,7 @@ fn glyph_em(t: &TextObject, g: &vectorcraft_text::PositionedGlyph) -> Option<f64
 fn touch_type(s: &mut Session, p: &Value) -> Result<Value> {
     const C: &str = "text.touchType";
     let id = id_param(p, "id").ok_or_else(|| bad(C, "missing `id`"))?;
+    check_numbers(p, &["start"], C)?;
     let start = byte_param(p, "start").ok_or_else(|| bad(C, "missing `start` (the byte offset of a character)"))?;
     if !["dx", "dy", "hScale", "vScale", "rotation"].iter().any(|k| p.get(*k).is_some_and(|v| !v.is_null())) {
         return Err(bad(C, "nothing to change: give dx, dy, hScale, vScale or rotation"));
@@ -841,6 +872,8 @@ fn create_in_path(s: &mut Session, p: &Value) -> Result<Value> {
         return Err(bad(C, "area type needs a path that encloses an area"));
     }
     super::paint::check_keep_model(p, C)?;
+    check_numbers(p, &["size"], C)?;
+    check_switches(p, &["vertical", "placeholder"], C)?;
     let style = super::create::new_type_style(s, p);
     let text = str_param(p, "text").unwrap_or("").to_string();
     let start = match point_param(p, "at") {
@@ -927,7 +960,7 @@ fn type_ranges(
 ) -> Result<Vec<(NodeId, usize, usize, bool)>> {
     // (text, its range; None: all of it).
     let targets: Vec<(NodeId, Option<(usize, usize)>)> = match id_param(p, "id") {
-        Some(id) => vec![(id, Some(range_of(p, edit::runs_len(&text_ref(s, id)?.runs))))],
+        Some(id) => vec![(id, Some(range_of(p, edit::runs_len(&text_ref(s, id)?.runs), c)?))],
         None => {
             let editing = editing_range(s)?.filter(|_| p.get("ids").filter(|v| !v.is_null()).is_none());
             match editing {
@@ -965,7 +998,7 @@ fn type_step(s: &mut Session, p: &Value) -> Result<Value> {
         Some("baselineShift") => Step::BaselineShift,
         _ => return Err(bad(C, "attribute must be size|leading|tracking|kerning|baselineShift")),
     };
-    let by = f64_or(p, "by", 1.0);
+    let by = number_or(p, "by", 1.0, C)?;
     if !by.is_finite() {
         return Err(bad(C, "by must be a number"));
     }

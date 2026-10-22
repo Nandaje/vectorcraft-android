@@ -39,7 +39,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Shape Builder",
             [],
             None,
-            "{ids?|id?: [id…] (default: selection), points: [[x,y]…] (drag path; one point = click), erase?: bool (erase mode, Alt: deletes the regions touched, and the pieces of open paths that cut regions and the edges (outline pieces between the points where paths meet; see shapeBuilder.regions) within tolerance; a deleted edge opens its path there, and edges bounding a deleted region go with it), tolerance?: pt (2, erase only), openFilledAsClosed?: true (Consider Open Filled Paths as Closed: a filled open path bounds a region as if an invisible edge closed it; false: it cuts the regions it crosses like an unfilled one), pickColorFrom?: \"artwork\" (default: the merged shape takes the fill of the front-most object over the first region the drag touches that an object covers; the current fill when only lines enclose every region touched) | \"swatches\" (the current fill), fill?: \"#rrggbb\" | {color|swatch|gradient|none} (overrides pickColorFrom)} → {ids, merged, regions, lines, edges} (counts deleted or merged)",
+            "{ids?|id?: [id…] (default: selection), points: [[x,y]…] (drag path; one point = click), erase?: bool (erase mode, Alt: deletes the regions touched, and the pieces of open paths that cut regions and the edges (outline pieces between the points where paths meet; see shapeBuilder.regions) within tolerance; a deleted edge opens its path there, and edges bounding a deleted region go with it), tolerance?: pt (2, erase only), gap?: pt (0–72; 0: Gap Detection off), openFilledAsClosed?: true (Consider Open Filled Paths as Closed: a filled open path bounds a region as if an invisible edge closed it; false: it cuts the regions it crosses like an unfilled one), pickColorFrom?: \"artwork\" (default: the merged shape takes the fill of the front-most object over the first region the drag touches that an object covers; the current fill when only lines enclose every region touched) | \"swatches\" (the current fill), fill?: \"#rrggbb\" | {color|swatch|gradient|none} (overrides pickColorFrom)} → {ids, merged, regions, lines, edges} (counts deleted or merged)",
             has_selection_or_ids,
             sb_merge
         ),
@@ -48,7 +48,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Shape Builder Regions",
             [],
             None,
-            "{ids?|id?, openFilledAsClosed?: true (as shapeBuilder.merge)} → {regions: [{bounds: [x0,y0,x1,y1], area, sources: [id…]}], lines: [{bounds, source: id}], edges: [{bounds, source: id}]} faces of the planar arrangement (unfilled open paths cut them, and filled ones too with openFilledAsClosed false; sources is empty for an area only they enclose), the pieces of those open paths and the edges (the other paths' outlines cut where paths meet; source: the front-most path along it), which erasing deletes",
+            "{ids?|id?, gap?: pt (0–72; 0: Gap Detection off), openFilledAsClosed?: true (as shapeBuilder.merge)} → {regions: [{bounds: [x0,y0,x1,y1], area, sources: [id…]}], lines: [{bounds, source: id}], edges: [{bounds, source: id}]} faces of the planar arrangement (unfilled open paths cut them, and filled ones too with openFilledAsClosed false; sources is empty for an area only they enclose), the pieces of those open paths and the edges (the other paths' outlines cut where paths meet; source: the front-most path along it), which erasing deletes",
             has_selection_or_ids,
             sb_regions
         ),
@@ -102,7 +102,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Live Paint Bucket",
             [],
             None,
-            "{group?: id | ids?|id?: [id…] (paths to make live first, as livePaint.make does), point: [x,y], color?|swatch?|gradient?|none? (default: current fill), tint?: 0..100, keepModel?: bool (both as paint.setFill)} fill the face containing point → {group, face}",
+            "{group?: id | ids?|id?: [id…] (paths to make live first, as livePaint.make does), point: [x,y], color?|swatch?|gradient?|none? (default: current fill), tint?: 0..100, keepModel?: bool (both as paint.setFill)} fill the face containing point, skipping hidden faces → {group, face}",
             has_doc,
             lp_fill
         ),
@@ -236,16 +236,23 @@ fn fill_param(s: &Session, p: &Value, cmd: &str) -> Result<Option<Paint>> {
     }
 }
 
+/// Gap Detection length in points, bounded like Live Paint's custom gap size.
+fn gap_param(p: &Value) -> f64 {
+    let gap = f64_or(p, "gap", 0.0);
+    if gap.is_finite() { gap.clamp(0.0, po::SHAPE_BUILDER_MAX_GAP) } else { 0.0 }
+}
+
 fn sb_merge(s: &mut Session, p: &Value) -> Result<Value> {
     const C: &str = "shapeBuilder.merge";
     let pts = points_param(p, "points").ok_or_else(|| bad(C, "missing points [[x,y]…]"))?;
     if pts.is_empty() || !pts.iter().all(|q| finite(*q)) {
         return Err(bad(C, "points must be a non-empty list of finite [x,y]"));
     }
-    let erase = bool_or(p, "erase", false);
+    let erase = switch_or(p, "erase", false, C)?;
+    check_numbers(p, &["tolerance", "gap"], C)?;
     // Line pieces and edges are only deleted (erase mode), never merged.
     let piece_tol = erase.then(|| f64_or(p, "tolerance", 2.0).clamp(0.0, 1000.0));
-    let open_filled_as_closed = bool_or(p, "openFilledAsClosed", true);
+    let open_filled_as_closed = switch_or(p, "openFilledAsClosed", true, C)?;
     let swatches = match p.get("pickColorFrom") {
         None | Some(Value::Null) => false,
         Some(v) => match v.as_str() {
@@ -262,7 +269,7 @@ fn sb_merge(s: &mut Session, p: &Value) -> Result<Value> {
     let roots = root_ids(s, p)?;
     let label = if erase { "Shape Builder Delete" } else { "Shape Builder" };
     let (ids, merged, touched) = s.edit(label, |d, sel| {
-        let (map, leaves) = BuilderMap::new(d, &roots, erase, open_filled_as_closed);
+        let (map, leaves) = BuilderMap::with_gap(d, &roots, erase, open_filled_as_closed, gap_param(p));
         let leaves: Vec<Node> = leaves.into_iter().cloned().collect();
         if map.shapes.is_empty() {
             return Err(EngineError::Other("Shape Builder: select paths or compound paths".into()));
@@ -280,7 +287,7 @@ fn sb_merge(s: &mut Session, p: &Value) -> Result<Value> {
         // Edges come back from the planar map within a few hundredths of the outlines they follow.
         let cut_tol = step * 0.2;
         let picked: Vec<&po::Region> = touched.regions.iter().filter_map(|&i| map.regions.get(i).map(|r| &r.0)).collect();
-        let faces = po::FaceMerger::new(&map.shapes);
+        let faces = po::FaceMerger::with_gap(&map.shapes, gap_param(p));
         let union = if picked.is_empty() { PathData::default() } else { faces.merge(&picked) };
         // The merged shape takes the look of the front-most object over the first region, or (for an
         // area only lines enclose) of the front-most object and the current fill.
@@ -376,9 +383,11 @@ fn replace_roots(d: &mut Document, roots: &[NodeId], nodes: Vec<Node>) -> Result
 }
 
 fn sb_regions(s: &mut Session, p: &Value) -> Result<Value> {
+    let open_filled_as_closed = switch_or(p, "openFilledAsClosed", true, "shapeBuilder.regions")?;
+    check_numbers(p, &["gap"], "shapeBuilder.regions")?;
     let roots = root_ids(s, p)?;
     let d = &s.doc()?.doc;
-    let (map, leaves) = BuilderMap::new(d, &roots, true, bool_or(p, "openFilledAsClosed", true));
+    let (map, leaves) = BuilderMap::with_gap(d, &roots, true, open_filled_as_closed, gap_param(p));
     let id_of = |i: usize| leaves.get(i).map(|n| n.id.0);
     let regions: Vec<Value> = map
         .regions
@@ -708,7 +717,7 @@ fn lp_gap_options(s: &mut Session, p: &Value) -> Result<Value> {
         Some(v) => Some(super::layer::layer_color_param(v).map_err(|e| bad(C, e))?.rgb()),
         None => None,
     };
-    let close = bool_or(p, "closeGaps", false);
+    let close = switch_or(p, "closeGaps", false, C)?;
     let targets = live_targets(s, p)?;
     let (faces, gaps, closed) = s.edit("Gap Options", |d, sel| {
         let (mut faces, mut gaps, mut closed) = (0, vec![], 0);
@@ -764,13 +773,24 @@ fn lp_fill(s: &mut Session, p: &Value) -> Result<Value> {
                 }
                 g
             }
-            None => match roots.iter().copied().find(|r| d.node(*r).is_some_and(|n| is_live_paint(n) && face_at(n, pt).is_some())) {
-                Some(g) => g,
-                None => make_live(d, sel, &roots)?.0,
-            },
+            None => {
+                let live_at = |face: fn(&Node, Point) -> Option<&Arc<Node>>| {
+                    roots.iter().copied().find(|r| d.node(*r).is_some_and(|n| is_live_paint(n) && face(n, pt).is_some()))
+                };
+                match (live_at(b::visible_face_at), live_at(face_at)) {
+                    (Some(g), _) => g,
+                    // At a point on a hidden face of a Live Paint group among the objects, the command returns an error
+                    // and does not merge the objects.
+                    (None, Some(_)) => return Err(EngineError::Other("no Live Paint face at that point".into())),
+                    (None, None) => make_live(d, sel, &roots)?.0,
+                }
+            }
         };
-        let fid =
-            d.node(gid).and_then(|n| face_at(n, pt)).map(|f| f.id).ok_or_else(|| EngineError::Other("no Live Paint face at that point".into()))?;
+        let fid = d
+            .node(gid)
+            .and_then(|n| b::visible_face_at(n, pt))
+            .map(|f| f.id)
+            .ok_or_else(|| EngineError::Other("no Live Paint face at that point".into()))?;
         d.node_mut(fid).ok_or(EngineError::NoNode(fid))?.appearance.set_fill(paint.clone());
         Ok((gid, fid))
     })?;
@@ -784,11 +804,11 @@ fn lp_stroke_edge(s: &mut Session, p: &Value) -> Result<Value> {
     let g = id_param(p, "group").ok_or_else(|| bad(C, "missing group"))?;
     super::paint::check_keep_model(p, C)?;
     let paint = paint_from(s, p)?.unwrap_or_else(|| s.paint.stroke.clone());
-    let width = p.get("width").and_then(Value::as_f64).unwrap_or(s.paint.stroke_width.max(0.0));
+    let width = number_or(p, "width", s.paint.stroke_width.max(0.0), C)?;
     if !(0.0..=1000.0).contains(&width) {
         return Err(bad(C, "width out of range"));
     }
-    let tol = f64_or(p, "tolerance", 4.0).clamp(0.0, 1000.0);
+    let tol = number_or(p, "tolerance", 4.0, C)?.clamp(0.0, 1000.0);
     let edge = s.edit("Live Paint Bucket", |d, _| {
         let n = d.node(g).filter(|n| is_live_paint(n)).ok_or_else(|| bad(C, format!("{g} is not a Live Paint group")))?;
         let eid = b::visible_edge_near(n, pt, tol).map(|e| e.id).ok_or_else(|| EngineError::Other("no Live Paint edge near that point".into()))?;
@@ -846,7 +866,7 @@ fn view_param(cmd: &str, p: &Value) -> Result<Option<TraceView>> {
 
 fn trace_params(p: &Value) -> Result<tr::TraceParams> {
     let name = str_param(p, "preset").unwrap_or("Default");
-    let enhanced = p.get("enhanced").and_then(Value::as_bool).unwrap_or(false);
+    let enhanced = switch_or(p, "enhanced", false, "imageTrace.make")?;
     // (A preset without an enhanced version is traced as it is.)
     let base = enhanced.then(|| tr::enhanced_preset(name)).flatten().or_else(|| tr::preset(name));
     let base = base.ok_or_else(|| bad("imageTrace.make", format!("unknown preset `{name}` (see imageTrace.presets)")))?;

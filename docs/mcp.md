@@ -615,6 +615,8 @@ Images follow the `compression` settings of their kind (`color`, `gray`, or `mon
 `abovePpi` as placed they are resampled (`downsample`: `average`, `subsample` or `bicubic`) to `ppi`, and compressed
 with `zip`, `jpeg` (at `quality`; images with transparency stay lossless) or `auto` (JPEGs stay JPEG, the others
 lossless). `none`, `jpeg2000`, CCITT and `runLength` are written as ZIP, with a warning when an image needs them.
+A 16-bit PNG that is not resampled, recompressed or converted keeps its 16 bits a sample in PDF 1.5 and later files,
+and is written at 8 bits in PDF 1.3 and 1.4 files.
 CMYK images stay CMYK (DeviceCMYK, or ICC-based with the CMYK profile when colours are tagged, as in PDF/X-3 and
 PDF/X-4): a CMYK JPEG neither resampled nor recompressed is written unchanged, and the others' ink amounts are
 resampled and compressed again (CMYK JPEG or ZIP). `output.conversion` converts them like CMYK colours: `destination`
@@ -732,9 +734,9 @@ PostScript form, which keeps layers, groups, compound paths and clipping groups 
 of `range` (default all; `{name}-{artboard}.ai` when several, listed in the result's `files`), with
 `transparentImages: "flatten"` (default) or `"omit"` for images with see-through pixels, opacity or a blending mode,
 `hiddenObjects: "layer"` (default: a hidden layer of each layer's hidden objects), `"omit"` or `"visible"`, and
-`outlineText: true` to write type as outlines instead of text objects. When an image in art that is flattened or whose
-raster effects are expanded can't be decoded, the result does not show it, and `warnings` carries "an image couldn't
-be decoded and is missing from the picture" once. From the CLI: `vectorcraft-cli convert in.svg
+`outlineText: true` to write type as outlines instead of text objects. An image that can't be decoded is left out of
+the file and does not show in art that is flattened or whose raster effects are expanded; `warnings` carries "an image
+couldn't be decoded and is missing from the picture" once for all such images. From the CLI: `vectorcraft-cli convert in.svg
 out.ai --ai-version 7 [--hidden-objects layer|omit|visible] [--transparent-images flatten|omit] [--outline-text]
 [--range R]`. `document.export`, `serialize`, `exportSelection` and `exportForScreens` refuse a `.ait` path or
 `format: "ait"` with an error that names `file.saveAsTemplate`, which writes it. The CLI's `run --export x.ait` and
@@ -943,11 +945,12 @@ missing one does.
 nothing.
 
 These Object menu commands refuse a string, a number or another value that is not true or false with
-`` `copy` must be true or false ``, naming the key, and change nothing: `reflectX`, `reflectY`, `random` and `copy` in
-`object.transformEach`; `gray` and `deleteRaster` in `object.createObjectMosaic`; `trim` in `object.cropImage`;
-`allArtboards` in `object.createTrimMarks`; and `byColumn` and `moveArtwork` in `artboard.rearrange`. A null is read as
-a key left out. `object.createTrimMarks` refuses a `style` that is not a string, such as `5`, with
-`` `style` must be roman or japanese ``, the message it gives for a string that names no style.
+`` `copy` must be true or false ``, naming the key, and change nothing: `reflectX`, `reflectY`, `random`, `copy`,
+`strokes`, `corners`, `objects` and `patterns` in `object.transformEach`; `gray` and `deleteRaster` in
+`object.createObjectMosaic`; `trim` in `object.cropImage`; `allArtboards` in `object.createTrimMarks`; and `byColumn`,
+`moveArtwork` and `patterns` in `artboard.rearrange`. A null is read as a key left out. `object.createTrimMarks`
+refuses a `style` that is not a string, such as `5`, with `` `style` must be roman or japanese ``, the message it gives
+for a string that names no style.
 
 A whole number that is larger than the build's `usize` can hold (4294967295 on a 32-bit build, such as the
 `wasm32-unknown-unknown` web build) counts as larger than any index, place, byte offset or count. An index, such as
@@ -973,7 +976,12 @@ undo history as they were: the options `copy`, `strokes`, `corners`, `patterns`,
 `object.transformAgain` and `object.setBounds`; `anchors` in `object.transform`; `big` in `object.nudge`;
 `absolute` in `object.rotate`; `proportional` in `object.setBounds`; `patterns` in `object.align`, `object.distribute`
 and `object.distributeSpacing`; `visible`, `locked`, `isolate` and `knockoutShape` in `object.setProps`; and
-`invertPie` and `makeSidesEqual` in `object.setLiveShape`. A null is read as a key left out.
+`invertPie`, `makeSidesEqual` and `relativeRadii` in `object.setLiveShape`. A null is read as a key left out.
+
+They also refuse a string or another value that is not a number with `` `opacity` must be a number, not "50" ``,
+naming the key, and leave the document and its undo history as they were: `opacity` in `object.setProps`; `radius` and
+`sides` in `object.setLiveShape`; `reference` in `object.setBounds`; and `artboard` in `object.align`,
+`object.distribute` and `object.distributeSpacing`. A null is read as a key left out.
 
 The blend and envelope commands refuse a string, a number or another value that is not true or false with
 `` `smooth` must be true or false ``, naming the key, and leave the document, its undo history and the options new
@@ -983,6 +991,37 @@ in `object.envelope.makeWithWarp`, `resetWithWarp` and `options`, also when an `
 in `object.envelope.resetWithMesh`; `antiAlias`, `distortAppearance`, `distortLinearGradients` and
 `distortPatternFills` in `object.envelope.options`; and `editing` in `object.envelope.editContents`. A null is read as
 a key left out.
+
+These commands refuse a string, a number or another value that is not true or false with
+`` `closed` must be true or false ``, naming the key, and leave the document and its undo history as they were:
+`clockwise` in `shape.spiral`; `closed` in `shape.arc` and `path.create`; `vertical` and `placeholder` in `text.create`
+and `text.createInPath`; `underline`, `strikethrough`, `allCaps`, `proportionalMetrics`, `tateChuYoko` and `noBreak`
+in `text.setRangeStyle`; `effective` in `text.getRange`; `on` in `type.opticalMarginAlignment`, `type.systemLayout`
+and `type.fractionalWidths`; `remove` and `overhang` in `type.ruby`; `expandInstances` in `symbol.delete`; `alt` in
+`symbol.spray` and `symbol.adjust`; `spot` and `global` in `swatch.new` and `swatch.edit`; `unlink` in
+`swatch.delete`; `fromArtwork`, `toGlobal` and `includeTints` in `swatch.newGroup`; `global` and `selection` in
+`swatch.addUsedColors`; `visible` in `appearance.setItem`; `copy` in `appearance.transfer`; `reverse` and `append` in
+`appearance.copyFrom`; `reverse` and `stroke` in `paint.editGradient`; `stroke` in `paint.setGradientGeom` and in
+`paint.freeform.addPoint`, `setPoint`, `deletePoint`, `addLine`, `splitLine` and `get`; `erase` and
+`openFilledAsClosed` in `shapeBuilder.merge`; `openFilledAsClosed` in `shapeBuilder.regions`; `closeGaps` in `livePaint.gapOptions`; and
+`enhanced` in `imageTrace.make` and `imageTrace.makeAndExpand`. A null is read as a key left out.
+
+These commands refuse a string or another value that is not a number with `` `radius` must be a number, not "2" ``,
+naming the key, and change nothing: `radius` in `shape.rectangle`; `sides` and `rotation` in `shape.polygon`;
+`radius2`, `points` and `rotation` in `shape.star`; `diameter`, `opacity`, `brightness`, `growth`, `fuzziness`,
+`rays`, `longest`, `rayFuzziness`, `rings`, `largest`, `x2`, `y2`, `direction`, `pathLength` and `seed` in
+`shape.flare`; `decay` and `segments` in `shape.spiral`; `rows` and `columns` in `shape.rectangularGrid`; `concentric`
+and `radial` in `shape.polarGrid`; `size` and the `width`, `height` and `fitMinPercent` of `area` in `text.create`;
+`size` and `fitMinPercent` in `text.createInPath`; `start`, `end`, `size`, `tracking`,
+`baselineShift`, `hScale`, `vScale`, `rotation` and `strokeWidth` in `text.setRangeStyle`; `start` and `end` in
+`text.editRange` and `text.getRange`; `start`, `hScale`, `vScale` and `rotation` in `text.touchType`; `by`, `start` and
+`end` in `type.step`; `by` in `type.size.increase` and `type.size.decrease`; `size` in `type.ruby`; `width`, `height`
+and `fitMinPercent` in `text.areaOptions`; `x` and `y` in `symbol.place`; `radius`, `density` and `scale` in
+`symbol.spray`; `radius` and `intensity` in `symbol.adjust`; `to` in `swatch.move`; `weight` and `opacity` in
+`appearance.setItem`; `angle` in `paint.editGradient` and in the `gradient` of a command that takes a paint; `t` in
+`paint.freeform.splitLine`; `tolerance` and `gap` in `shapeBuilder.merge`; `gap` in `shapeBuilder.regions`; and
+`width` and `tolerance` in `livePaint.strokeEdge`. A null is read as a key left out. A gradient stop that names a
+swatch refuses a `tint` that is not a number with `` stop 0: `tint` must be a number ``.
 
 A step can use an earlier step's result, in `run` as in the `command_batch` tool. A parameter string that is exactly
 `$N` or `$N.path` takes that value from the result of step `N` (counting from 0, in the order they ran; `run --in`'s
@@ -1349,6 +1388,9 @@ already walks Image Trace. Short agent entry points:
   `livePaint.merge` keeps the bottom Live Paint group's id, name, lock, visibility, transparency, appearance, opacity
   mask and graphic style link. With a Live Paint group among the objects, `livePaint.make` adds the others to it as
   `livePaint.merge` does, and so does `livePaint.fill {ids}` when `point` is outside that group's faces.
+  `livePaint.fill` does not fill a face that is hidden on its own. With `group`, a point on a hidden face is an
+  error. With `ids`, at a point on a hidden face it fills the face there of another Live Paint group among the
+  objects; otherwise it returns an error and does not merge the objects.
 
 `brush.selectionArt {ids?|id?}` (a query) replies `{art}`: the object that `brush.new` given the same `ids` or `id`,
 or the same selection, takes as a new scatter or art brush's art and as a new pattern brush's side tile. Several
@@ -1535,7 +1577,13 @@ Recolor Artwork keys colours by identity, not hex: `recolor.colors` lists each c
 Lab and RGB colours that look alike stay apart, and every colour parameter also accepts a key.
 `recolor.reduce {colors?, method?, preserve?, limitTo?}` groups the selection's colours into rows of similar colours (k-means in Lab, weighted by use;
 tints of a global swatch share its row; White and Black are preserved by default) and returns a map of rows
-`[{from: [keys], to: key}]` to edit and pass to `recolor.apply {map, method?, limitTo?, group?, groupColors?, rename?}`.
+`[{from: [keys], to: key}]` to edit and pass to `recolor.apply {map, method?, model?, limitTo?, group?, groupColors?, rename?}`.
+For scripts and MCP, `model` selects the replacement color model: `keep` (default) retains each
+original color's model, `new` takes the replacement's model, and `document` converts replacements
+and edited color groups to the document's model. Invalid values fail before editing. This parameter
+is not a control in the Recolor Artwork dialog. A returned `note` reports a model conversion in
+`keep` mode.
+
 `method` says how a row's colours take its new colour: `exact`, `preserveTints` (tints of the row's darkest colour
 stay tints), `scaleTints` (every colour becomes a tint as light, relative to the darkest), `tintsShades` (lighter and
 darker than the row's average become tints and shades) or `hueShift` (the most saturated colour takes the new colour,
@@ -1671,7 +1719,9 @@ under `ui.library_panels`.
 `ui.libraryPanel.locate {panel, path?}` is Locate Library…: it loads the library at `path` (without one, it
 asks for a file) as Other Library… does and shows it in the open panel `panel`, which keeps its view, find
 field and Persistent, and answers as `ui.libraryPanel` does. When the file's library already has a panel open,
-`panel` closes and is forgotten, and that panel is brought forward, made persistent when `panel` was.
+`panel` closes and is forgotten, and that panel is brought forward, made persistent when `panel` was. On a
+panel whose library isn't missing, it answers an error without asking for or loading a file, and the panel
+keeps its library.
 `window.swatchLibrary` and `window.graphicStyleLibrary` also take a missing library's id, so a closed missing
 panel opens again; they answer its file's name without the extension and `count: 0`.
 
@@ -2177,6 +2227,13 @@ an `x` without a `y`, or a `y` without an `x`, with "x and y must be given toget
 string, with "x and y must both be numbers". All of them except `path.curvature` refuse a pen pressure that is neither
 a number nor null with `` `pressure` must be a number, not "0.5" ``. `path.close` refuses an `in` that is not `[x, y]`
 with `` `in` must be [x, y] ``.
+
+These commands refuse a string, a number or another value that is not true or false with
+`` `closed` must be true or false ``, naming the key; the document does not change and no undo step is recorded:
+`independent` in `path.close` and `path.setHandle`; `patterns` in `path.moveAnchors`; `closed`, `keepSelected` and
+`fill` in `path.freehand` (and in `brush.freehand`); `closed` and the `corner` of a point in `path.curvature`; `corner`
+in `path.curvatureEdit`; `perpendicular` in `path.reshapeSegment`; and `keepSelected`, `mergeOnlySelection` and
+`merge` in `path.blob`. A null is read as a key left out.
 
 A `pointer_gesture` with `mods: {cmd: true}` held at the press, with any tool but the selection tools (Command on
 macOS, Ctrl elsewhere), drags with the selection tool chosen last (`select_tool`), or Direct Selection with the Pen,
@@ -2864,6 +2921,13 @@ also move the pattern tiles of the copies when `patterns` is true (default: pref
 Every artboard command that takes an `index` fails with `no such artboard` when the `index` is not the
 0-based index of an artboard (past the last one, negative, fractional, a string or null), and the document and the
 clipboard stay as they were.
+These artboard commands refuse a string, a number or another value that is not true or false with
+`` `art` must be true or false ``, naming the key, and leave the document, its undo history and the clipboard as they
+were: `moveArt`, `scaleArt`, `strokes`, `corners`, `patterns`, `lockedAndHidden` and an artboard's `locked` in
+`artboard.setProps`; `moveArt`, `copy` and `patterns` in `artboard.move`; `art` and `patterns` in `artboard.duplicate`;
+and `art` in `artboard.copy` and `artboard.cut`. `artboard.setProps` refuses an artboard's `x`, `y`, `width` or
+`height` that is not a number, and `artboard.move` refuses such a `dx` or `dy`, with
+`` `dx` must be a number, not "10" ``. A null is read as a key left out.
 
 Scale Artwork with Artboard (#602): `artboard.setProps {index, x?, y?, width?, height?, scaleArt: true}` resizes an
 artboard and scales the art fully inside it, and its artboard guides, from the old rectangle onto the new one, each side
@@ -3196,7 +3260,9 @@ width profiles, arrowheads) as filled outlines; `"editability"` keeps type as te
 `alterPaths` writes every stroke as its filled outline, `outlineText` outlines type, `selectedOnly` writes only the
 selected objects in their layers (every export takes it), and `useArtboards: true` writes one drawing per chosen
 artboard holding the art over it. What DXF can't hold (gradients and patterns as one colour, blending, opacity masks,
-raster effects, clipping) comes back in `warnings`.
+raster effects, clipping) comes back in `warnings`. In R13 and later, an image that can't be decoded is left out with
+no linked file, and `warnings` carries "an image couldn't be decoded and is missing from the picture" once for all such
+images.
 
 DWG can't be written (no openly licensed writer exists): `document.formats` lists it under `unsupported` with that
 hint, and exporting to it answers with the hint to export DXF. PICT files are not supported either and say so when
@@ -3369,7 +3435,9 @@ per artboard, `{stem}_{artboard}.eps`, each bounded by its artboard. `level: 3` 
 shadings and masks transparent image pixels out; `level: 2` writes gradients as bands of colour (as does
 `compatibleGradients`) and transparent pixels white. Type is always glyph outlines, so no fonts are needed (`embedFonts`
 is accepted); spot colours are Separation colour spaces, and overprinting fills and strokes overprint unless
-`overprints: "discard"`. RGB documents are written in CMYK unless `cmykPostScript: false`.
+`overprints: "discard"`. RGB documents are written in CMYK unless `cmykPostScript: false`. When the file would hold an
+image that can't be decoded, the image is left out, and `warnings` carries "an image couldn't be decoded and is missing
+from the picture" once for all such images.
 
 PostScript has no transparency: it is flattened first with `flattenerPreset` (`high`, `medium` (default), `low` or a
 saved preset, see `flattener.presets.list`) and `flattener: {…}` options over it (those of
@@ -3502,7 +3570,9 @@ outlines; gradients become images clipped to their shape, pattern fills their ti
 effects images rendered at the document's raster effects resolution. The header's frame is the artboard in 0.01 mm.
 WMF flattens curves into polygons in 16-bit units behind a placeable header (1440 units an inch, fewer for pictures
 over about 22 inches); it has no clipping, transparency or gradients, so clipped art is written whole, images over
-white and gradients and patterns as one colour. What a format leaves out comes back in `warnings`.
+white and gradients and patterns as one colour. What a format leaves out comes back in `warnings`. When the picture
+would hold an image that can't be decoded, the image is left out, and `warnings` carries "an image couldn't be decoded
+and is missing from the picture" once for all such images.
 
 `document.open` and `file.place` read `.emf` and `.wmf` (placeable or not) into one artboard, the picture's frame, and
 one layer: paths with their fills and strokes (pens become strokes with caps, joins and dashes), clipping groups,
@@ -4133,6 +4203,25 @@ explicitly, `{}` for none. Each command is one undo step.
 ```json
 {"name":"run_command","arguments":{"command":"text.fontList","params":{"family":"Bahnschrift","style":"Regular"}}}
 {"name":"run_command","arguments":{"command":"text.setFormat","params":{"fontAxes":{"wght":650,"wdth":87.5}}}}
+```
+
+## Character Direction
+
+`text.setFormat {charDirection: "default"|"leftToRight"|"rightToLeft"}` (the selected type, or `ids`) and
+`text.setRangeStyle {id, start, end, charDirection}` (a range) set the direction of the characters inside their
+paragraph, as the Character panel menu's Character Direction does with the Middle Eastern (Indic) options shown. The bidi
+algorithm (UAX #9) resolves each stretch of characters with a direction as an embedding in that direction, as if an LRE
+or RLE stood before it and a PDF after it: `leftToRight` keeps a date written with spaces, such as `21 10 2026`, in its
+order inside a right-to-left paragraph, and `rightToLeft` sets a Hebrew or Arabic word and the punctuation after it right
+to left inside a left-to-right paragraph. Characters keep their own strong direction inside an embedding: Latin letters
+set Right to Left still read left to right. `default` leaves the characters to the bidi algorithm. The paragraph's own
+direction is unchanged. SVG export writes type with a character drawn right to left, or with a run set Right to Left,
+as outlines; live SVG text writes `direction="ltr"` and `unicode-bidi="embed"` on each run set Left to Right. Character
+Direction is Default until set and is saved only when set, and character styles captured from type carry it. Each
+command is one undo step.
+
+```json
+{"name":"run_command","arguments":{"command":"text.setRangeStyle","params":{"id":12,"start":9,"end":19,"charDirection":"leftToRight"}}}
 ```
 
 ## Digits

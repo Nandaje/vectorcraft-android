@@ -1,5 +1,5 @@
 //! Effect › Sketch (Bas Relief, Chalk & Charcoal, Charcoal, Chrome, Halftone Pattern, Note Paper, Photocopy, Plaster,
-//! Reticulation, Stamp and Water Paper; Graphic Pen lives in
+//! Reticulation, Stamp, Torn Edges and Water Paper; Graphic Pen lives in
 //! [`super::brushstrokes`]). Original filters built from public behaviour documentation:
 //! <https://helpx.adobe.com/illustrator/using/summary-effects.html> (Sketch effects redraw in
 //! black and white; Water Paper flows colours on damp fibrous paper) and the public Photoshop Elements Artistic filters guide. Visual
@@ -17,6 +17,7 @@ use super::{PixelSpace, blur_plane, pick};
 
 const SALT_CHALK: u64 = 216;
 const SALT_CHROME: u64 = 0xC40_4D45;
+const SALT_TORN: u64 = 0x746f726e5f6564;
 const SALT_WATER: u64 = 208;
 const EDGE_SOFT: f64 = 0.8;
 const TONE_SOFT: f64 = 1.0;
@@ -358,6 +359,55 @@ pub(super) fn reticulation(px: &mut [[u8; 4]], w: usize, h: usize, space: &Pixel
         let grain = 0.55 * coarse + 0.45 * fine;
         let ink = if tone + (grain - 0.5) * spread > 0.5 { 1.0 } else { 0.0 };
         *p = premultiply([(1.0 - ink) as f32; 3], f32::from(p[3]) / 255.0);
+    });
+}
+
+/// Torn Edges: the object in high-contrast black and white with ragged edges. `image_balance`
+/// (0..50) shifts whether midtones fall to ink or paper; `smoothness` (0..15) softens tones and
+/// the fraying; `contrast` (0..20) hardens the split. Coverage is kept.
+pub(super) fn torn_edges(px: &mut [[u8; 4]], w: usize, h: usize, space: &PixelSpace, image_balance: f64, smoothness: f64, contrast: f64) {
+    if !(image_balance.is_finite() && smoothness.is_finite() && contrast.is_finite()) {
+        return;
+    }
+    let Some(place) = Place::new(space, w, h) else { return };
+    if w == 0 || h == 0 || w.checked_mul(h) != Some(px.len()) {
+        return;
+    }
+    let mut tone: Vec<f32> = px.iter().map(|p| luma(straight(*p)) * f32::from(p[3]) / 255.0).collect();
+    let cover: Vec<f32> = px.iter().map(|p| f32::from(p[3]) / 255.0).collect();
+    let sigma = (0.12 * smoothness.clamp(0.0, 15.0)) / place.px.max(1e-9);
+    if sigma > 0.0 {
+        blur_plane(&mut tone, w, h, sigma);
+    }
+    let mut edges: Vec<f32> = sobel(&tone, w, h).into_iter().zip(sobel(&cover, w, h)).map(|(t, c)| t.max(c)).collect();
+    let edge_soft = (0.08 * smoothness.clamp(0.0, 15.0)) / place.px.max(1e-9);
+    if edge_soft > 0.0 {
+        blur_plane(&mut edges, w, h, edge_soft);
+    }
+    let peak = edges.iter().copied().fold(0.0f32, f32::max);
+    let balance = image_balance.clamp(0.0, 50.0);
+    // Lower balance favours ink (darker result); higher balance favours paper.
+    let balance_tone = 0.25 + balance / 50.0 * 0.75;
+    let steep = 4.0 + contrast.clamp(0.0, 20.0) * 0.45;
+    let hard = contrast.clamp(0.0, 20.0) >= 18.0;
+    let fray = 0.25 + 0.05 * smoothness.clamp(0.0, 15.0);
+    place.each(px, |x, y, p| {
+        let a = f32::from(p[3]) / 255.0;
+        if a <= 0.0 {
+            *p = [0; 4];
+            return;
+        }
+        let i = y * w + x;
+        let t = tone.get(i).copied().unwrap_or(0.0);
+        let e = if peak > 1e-6 { edges.get(i).copied().unwrap_or(0.0) / peak } else { 0.0 };
+        let noise = smooth_noise(SALT_TORN, place.at(x, y), 2.5 + 0.3 * smoothness) as f32;
+        let local = (1.0 - balance_tone) as f32 + e * fray as f32 * noise;
+        let mut ink = 1.0 / (1.0 + (steep as f32 * (t - local)).exp());
+        if hard {
+            ink = if ink > 0.5 { 1.0 } else { 0.0 };
+        }
+        let paper = 1.0 - ink.clamp(0.0, 1.0);
+        *p = premultiply([paper, paper, paper], a);
     });
 }
 

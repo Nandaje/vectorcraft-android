@@ -1051,6 +1051,11 @@
 	Fidelity:	Återgivning:
 	Figure Space	Siffermellanrum
 	Figure:	Figur:
+# Artwork drag between document tabs.
+	Drop Artwork	Släpp grafik
+@msg	{key} must be [x, y] with finite coordinates	{key} måste vara [x, y] med ändliga koordinater
+@msg	ids must contain 1–10000 object ids	ids måste innehålla 1–10000 objekt-id:n
+
 	File	Fil
 	File Dimensions	Fildimensioner
 	File Format:	Filformat:
@@ -2342,6 +2347,7 @@
 	Proof Setup	Provtrycksinställningar
 	Properties	Egenskaper
 	Proportional Metrics	Proportionella mått
+	Character Direction	Teckenriktning
 	Digits	Siffror
 	Arabic	Arabiska
 	Hindi	Hindi
@@ -3905,7 +3911,7 @@ axis	Both	Båda
 @msg	give the path `id` and the width point `index`	ange banans `id` och breddpunktens `index`
 @msg	guides are locked	stödlinjerna är låsta
 @msg	handle must be in or out	handle måste vara in eller out
-@msg	image '{key}' has no pixels and was left out	bilden '{key}' har inga pixlar och utelämnades
+@msg	an image has no pixels and was left out	en bild utan pixlar utelämnades
 @msg	image data `{_1}` is missing	bilddata `{_1}` saknas
 @msg	image would be too large; lower the resolution	bilden skulle bli för stor; sänk upplösningen
 @msg	index must be a number or first, previous, next or last	index måste vara ett tal eller first, previous, next eller last
@@ -4480,6 +4486,7 @@ effect	Soft	Mjuk
 	Activate Panel	Aktivera panel
 	Change Panel Layout	Ändra panellayout
 	Close Panel	Stäng panel
+	Collapse Panel Group	Komprimera panelgrupp
 	Move Panel	Flytta panel
 	Group with	Gruppera med
 	Resize panels	Ändra storlek på paneler
@@ -4490,6 +4497,12 @@ effect	Soft	Mjuk
 @msg	before must name a panel	before måste ange en panel
 @msg	docking action contains an unknown panel or an excessive split path	dockningsåtgärden innehåller en okänd panel eller en alltför djup delningssökväg
 @msg	group must be true or false	group måste vara true eller false
+@msg	panel floats; collapse its group with window.panel.float {panel, collapsed}	panelen flyter; komprimera dess grupp med window.panel.float {panel, collapsed}
+@msg	panel is not in a dock group	panelen ligger inte i en dockningsgrupp
+@msg	only a dock group above or below others collapses, not one beside another	bara en dockningsgrupp ovanför eller under andra komprimeras, inte en bredvid en annan
+@msg	icon must be true or false	icon måste vara true eller false
+@msg	icon only docks a panel in the icon column, with no anchor	icon dockar bara en panel i ikonkolumnen, utan anchor
+@msg	column docks a set as a dock column, with no anchor or icon	column dockar en uppsättning som en dockningskolumn, utan anchor eller icon
 @msg	move requires a destination panel	flyttning kräver en målpanel
 @msg	move requires an existing destination panel	flyttning kräver en befintlig målpanel
 @msg	onto must name a floating panel	onto måste ange en flytande panel
@@ -5228,6 +5241,8 @@ theme	Appearance	Utseende
 	Sketch	Skiss
 	Halftone Pattern…	Rastermönster…
 	Halftone Pattern	Rastermönster
+	Torn Edges…	Riviga kanter…
+	Torn Edges	Riviga kanter
 	Pattern Type	Mönstertyp
 	Dot	Punkt
 # User Interface › Color Scheme
@@ -5279,9 +5294,11 @@ theme	Appearance	Utseende
 @msg	Persistent libraries not found: {files}	Beständiga bibliotek hittades inte: {files}
 @msg	`{given}` isn't a library panel (see window.swatchLibrary)	`{given}` är inte en bibliotekspanel (se window.swatchLibrary)
 @msg	library panel `{given}` isn't open	bibliotekspanelen `{given}` är inte öppen
+@msg	library panel `{given}` isn't missing its library	bibliotekspanelen `{given}` saknar inte sitt bibliotek
 @msg	too many library panels were opened in this session	för många bibliotekspaneler har öppnats i den här sessionen
 @msg	The image is {_1} × {_2} pixels, more than {LARGE_TRACE_SIDE} on a side: it is traced, but more slowly. A lower-fidelity preset or a smaller copy of the image traces faster.	Bilden är {_1} × {_2} pixlar, mer än {LARGE_TRACE_SIDE} på en sida: den vektoriseras, men långsammare. En förinställning med lägre återgivning eller en mindre kopia av bilden går snabbare.
 @msg	The image was traced at {_1} × {_2} pixels, scaled down from {_3} × {_4} ({_5} megapixels at most).	Bilden vektoriserades vid {_1} × {_2} pixlar, nedskalad från {_3} × {_4} (högst {_5} megapixlar).
+	Gap Length:	Lucklängd:
 	Artboard {n} of {total}	Rityta {n} av {total}
 	Encoding and writing the file…	Kodar och skriver filen…
 @plural	{n} more export waiting|{n} more exports waiting	{n} export till väntar|{n} exporter till väntar
@@ -5298,6 +5315,14 @@ theme	Appearance	Utseende
 	Full Justify	Fullständig marginaljustering
 	Minimum must not exceed Desired, nor Desired Maximum.	Minimum får inte överstiga Önskat, och Önskat inte Maximum.
 	Justification	Justering
+	Add filters from the list above	Lägg till filter från listan ovan
+	Add to Stack	Lägg till i stacken
+	Applied Filters	Tillämpade filter
+	Categories	Kategorier
+	Choose a filter	Välj ett filter
+	Effect Gallery	Effektgalleri
+	Filters	Filter
+	Select artwork to apply effects	Välj grafik för att tillämpa effekter
 @msg	the file's variables and data sets weren't read (variables: {variables}, data sets: {data_sets}): the Variables panel doesn't list them	filens variabler och datauppsättningar lästes inte (variabler: {variables}, datauppsättningar: {data_sets}): panelen Variabler visar dem inte
 # Select by Color (select.color)
 	Select by Color	Markera efter färg
@@ -5323,3 +5348,13 @@ theme	Appearance	Utseende
 	Water Paper	Vått papper
 	Ruby…	Ruby…
 	Ruby	Ruby
+	Ease In	Långsam start
+	Ease Out	Långsamt slut
+	Ease In Out	Långsam start och slut
+	Ease Out In	Långsamt slut och start
+	Ramp:	Styrka:
+	Shift:	Förskjutning:
+	Fresco…	Fresk…
+	Fresco	Fresk
+	Effect Gallery…	Effektgalleri…
+	Effect Gallery Dialog	Dialogrutan Effektgalleri

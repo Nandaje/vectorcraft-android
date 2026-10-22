@@ -33,6 +33,9 @@ const CLIPPING: &str = "clipping masks are not applied: the art they clip is wri
 const FLAT_GRADIENTS: &str = "gradients are written as one colour, the average of their stops";
 const FLAT_PATTERNS: &str = "pattern fills are written as one colour";
 const TOO_MANY_TILES: &str = "pattern fills past 250,000 tiles in all are written as one colour";
+/// The warning for an image left out because it can't be decoded: the note raster exports give
+/// (`vectorcraft-engine`'s `rasterfx::undecoded_warning`).
+const UNDECODED: &str = "an image couldn't be decoded and is missing from the picture";
 
 /// A stroke as a pen draws it.
 #[derive(Clone, Debug, PartialEq)]
@@ -449,7 +452,7 @@ impl<'a> Scene<'a> {
             .filter(|i| i.width > 0 && i.height > 0)
             .map(Arc::new);
         if img.is_none() {
-            self.warn(&format!("image '{key}' could not be decoded and was left out"));
+            self.warn(UNDECODED);
         }
         self.images.insert(key.to_string(), img.clone());
         img

@@ -92,10 +92,19 @@ impl Session {
         if self.tool.id() == id {
             return Ok(());
         }
+        // Sampling type keeps its highlighted characters as the target. Capture before the
+        // Type tool deactivates (which commits typing and clears its editing state).
+        let is_type = |id: &str| matches!(id, "type" | "areaType" | "typeOnPath" | "verticalType" | "verticalAreaType" | "verticalTypeOnPath");
+        let text_selection = ((id == "eyedropper" && is_type(self.tool.id())) || (self.tool.id() == "eyedropper" && is_type(id)))
+            .then(|| self.tool.options())
+            .filter(|o| o.get("editing").is_some_and(|v| !v.is_null()) && o.get("start") != o.get("end"));
         let acts = self.with_tool_cx(view, |t, cx| t.deactivate(cx));
         self.apply_actions(acts)?;
         self.keep_tool_settings();
         self.tool = self.make_tool(id);
+        if let Some(selection) = text_selection {
+            self.tool.set_option("textSelection", &selection);
+        }
         if vectorcraft_tools::catalog::is_selection_tool(id) {
             self.last_selection_tool = Some(self.tool.id());
         }
@@ -512,9 +521,9 @@ impl Session {
     }
 
     /// Let the active tool finish work a command from outside it ended ([`vectorcraft_tools::Tool::after_command`]):
-    /// the Type tool stops editing text that is no longer selected. Only while it edits text.
+    /// the Type tool and the Eyedropper clear a character range whose text is no longer selected.
     pub(crate) fn after_command(&mut self) {
-        if self.in_tool_actions || !self.tool.wants_text() {
+        if self.in_tool_actions || (!self.tool.wants_text() && self.tool.id() != "eyedropper") {
             return;
         }
         let acts = self.with_tool_cx(self.last_view, |t, cx| t.after_command(cx));

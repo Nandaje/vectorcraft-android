@@ -229,7 +229,9 @@ fn variables_panel_data_sets_ask_off_the_ui_thread() {
     let (mut app, shown, _) = app();
     app.run("file.new", json!({"width": 100, "height": 80})).unwrap();
     let dir = vectorcraft_testkit::temp_dir("picks-data-sets");
-    let _ = std::fs::remove_dir_all(&dir);
+    if let Err(e) = std::fs::remove_dir_all(&dir) {
+        assert_eq!(e.kind(), std::io::ErrorKind::NotFound, "cannot empty {}: {e}", dir.display());
+    }
     std::fs::create_dir_all(&dir).unwrap();
     let (csv, out) = (dir.join("sets.csv"), dir.join("out.csv"));
     std::fs::write(&csv, "name,Name\nB,y\n").unwrap();
@@ -258,7 +260,10 @@ fn other_swatch_library_asks_off_the_ui_thread() {
     app.run("swatch.new", json!({"name": "Signal", "color": "#ff3300"})).unwrap();
     let (dir, file) = saved_document(&mut app, "swatches");
     click(&mut app, "Other Library…", library_menu::<SwatchLibraries>);
-    assert!(matches!(shown.requests().as_slice(), [PickRequest::Open(_)]));
+    assert!(matches!(
+        shown.requests().as_slice(),
+        [PickRequest::Open(p)] if p.filters.first().is_some_and(|(label, exts)| label == "Swatch libraries" && exts.iter().any(|e| e == "ase"))
+    ));
     poll(&mut app);
     assert!(library_panel::last_open(&app.ui).is_none() && app.ui.status.is_empty(), "{}", app.ui.status);
     shown.answer(&[&file]);

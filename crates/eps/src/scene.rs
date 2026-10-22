@@ -33,6 +33,10 @@ const TRANSPARENCY: &str =
 const RASTER_FX: &str = "raster effects (shadows, glows, blurs, feathering) are left out: EPS has no transparency, flatten them first";
 const IMAGE_ALPHA_L2: &str = "transparent image pixels are written white at PostScript Level 2 (Level 3 masks them out)";
 const IMAGE_PARTLY: &str = "partly transparent image pixels are written over white";
+/// The warning for an image left out because it can't be decoded: the note raster exports give
+/// (`vectorcraft-engine`'s `rasterfx::undecoded_warning`).
+const UNDECODED: &str = "an image couldn't be decoded and is missing from the picture";
+const LARGE_IMAGE: &str = "an image that is too large for EPS was left out";
 const SPOT_GRADIENTS: &str = "gradients of spot colours are written in process colours";
 const MISSING_PATTERN: &str = "missing patterns are written as mid-grey";
 
@@ -859,11 +863,11 @@ impl<'a> Scene<'a> {
     /// Image `key` as RGBA pixels; `None` (with a warning) when it can't be written.
     fn decode_image(&mut self, key: &str) -> Option<image::RgbaImage> {
         let Some(img) = self.doc.images.get(key).and_then(|blob| image::load_from_memory(&blob.bytes).ok()) else {
-            self.warn(&format!("image '{key}' could not be decoded and was left out"));
+            self.warn(UNDECODED);
             return None;
         };
         if u64::from(img.width()) * u64::from(img.height()) > MAX_IMAGE_PIXELS {
-            self.warn(&format!("image '{key}' is too large for EPS and was left out"));
+            self.warn(LARGE_IMAGE);
             return None;
         }
         Some(img.to_rgba8())

@@ -139,8 +139,11 @@ fn check_revolve_count(n: &Node, cmd: &str) -> Result<()> {
     Ok(())
 }
 
-const ONE_3D: &str = "An object takes one 3D effect. Edit the existing effect's options, or remove it first.";
+pub(crate) const ONE_3D: &str = "An object takes one 3D effect. Edit the existing effect's options, or remove it first.";
 
+/// `effect.apply`: adds effect `effect` (or `id`) with `params`, its defaults filled in, to the
+/// targets' active item as one undo step. A 3D effect must fit each target, which takes only one;
+/// a Pathfinder effect on loose objects groups them first. → `{ids, index, item}`.
 pub(crate) fn apply(s: &mut Session, p: &Value) -> Result<Value> {
     const C: &str = "effect.apply";
     let id = str_param(p, "effect").or_else(|| str_param(p, "id")).ok_or_else(|| bad(C, "missing `effect` id"))?;
@@ -172,13 +175,9 @@ pub(crate) fn apply(s: &mut Session, p: &Value) -> Result<Value> {
     if effects::is_three_d(id) {
         for target in appearance_targets(s, p)? {
             let n = s.doc()?.doc.node(target).ok_or(EngineError::NoNode(target))?;
-            if id == effects::REVOLVE {
-                effects::validate_revolve(n, &effect.params).map_err(|e| bad(C, e))?;
-                if effects::has_revolve(n) {
-                    return Err(bad(C, "A profile supports one Revolve effect. Edit the existing effect's options instead."));
-                }
-            } else {
-                effects::validate_solid(n, id, &effect.params).map_err(|e| bad(C, e))?;
+            effects::validate_three_d(n, id, &effect.params).map_err(|e| bad(C, e))?;
+            if id == effects::REVOLVE && effects::has_revolve(n) {
+                return Err(bad(C, "A profile supports one Revolve effect. Edit the existing effect's options instead."));
             }
             if effects::has_revolve(n) || effects::has_solid(n) {
                 return Err(bad(C, ONE_3D));
@@ -333,6 +332,9 @@ fn lighting_preset(s: &mut Session, p: &Value) -> Result<Value> {
     set_params(s, &options)
 }
 
+/// `effect.setParams`: merges `params` into the effect at `index` of the targets' active item, and
+/// sets its Warp style (`warpStyle`) or visibility (`visible`), as one undo step. They are checked
+/// as `effect.apply` checks them, and a visible 3D effect must still fit. → `{ids}`.
 fn set_params(s: &mut Session, p: &Value) -> Result<Value> {
     const C: &str = "effect.setParams";
     let index = index_param(p, "index", C)?;
@@ -372,11 +374,7 @@ fn set_params(s: &mut Session, p: &Value) -> Result<Value> {
             if let (Some(cur), Value::Object(new)) = (prospective.as_object_mut(), effects::upgrade_params(&e.id, &params)) {
                 cur.extend(new);
             }
-            if e.id == effects::REVOLVE {
-                effects::validate_revolve(n, &prospective).map_err(|e| bad(C, e))?;
-            } else {
-                effects::validate_solid(n, &e.id, &prospective).map_err(|e| bad(C, e))?;
-            }
+            effects::validate_three_d(n, &e.id, &prospective).map_err(|e| bad(C, e))?;
         }
     }
     let ids = edit_effects(s, p, item, C, "Effect Options", &format!("{C}: no effect at index {index}"), |fx| {
@@ -410,7 +408,9 @@ const GLASS: &str = "distort.glass";
 /// Effect › Texture › Texturizer.
 const TEXTURIZER: &str = "texture.texturizer";
 
-fn texture_load_effect(id: &str) -> bool {
+/// Does effect `id` have Load Texture: a `textureImage` that `effect.apply` reads from an image
+/// file (Glass, Texturizer)?
+pub(crate) fn texture_load_effect(id: &str) -> bool {
     id == GLASS || id == TEXTURIZER
 }
 

@@ -767,7 +767,7 @@ pub(crate) fn load_library(app: &mut VectorcraftApp, params: Value) -> Result<Va
 
 /// Other Library…: load the library (or document) at `path`, else one picked in an open dialog.
 pub(crate) fn other_library(app: &mut VectorcraftApp, path: Option<String>) -> Result<Value, String> {
-    match library_panel::pick_library_file(app, path)? {
+    match library_panel::pick_library_file(app, path, library_panel::library_pick_filters(GraphicStyleLibraries::KIND))? {
         Some(path) => load_library(app, json!({ "path": path })),
         None => Ok(Value::Null),
     }

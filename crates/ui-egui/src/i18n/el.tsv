@@ -1015,6 +1015,11 @@
 	Fidelity:	Πιστότητα:
 	Figure Space	Κενό ψηφίου
 	Figure:	Σχήμα:
+# Artwork drag between document tabs.
+	Drop Artwork	Απόθεση γραφικών
+@msg	{key} must be [x, y] with finite coordinates	Το {key} πρέπει να είναι [x, y] με πεπερασμένες συντεταγμένες
+@msg	ids must contain 1–10000 object ids	Το ids πρέπει να περιέχει 1–10000 αναγνωριστικά αντικειμένων
+
 	File	Αρχείο
 	File Dimensions	Διαστάσεις αρχείου
 	File Format:	Μορφή αρχείου:
@@ -1738,6 +1743,7 @@
 	Proof Colors	Χρώματα δοκιμίου
 	Proof Setup	Ρύθμιση δοκιμίου
 	Properties	Ιδιότητες
+	Character Direction	Κατεύθυνση χαρακτήρων
 	Digits	Ψηφία
 	Punctuation	Στίξη
 	Puppet Warp	Παραμόρφωση με σημεία ελέγχου
@@ -2229,6 +2235,7 @@ effect	Soft	Απαλό
 	Activate Panel	Ενεργοποίηση πάνελ
 	Change Panel Layout	Αλλαγή διάταξης πάνελ
 	Close Panel	Κλείσιμο πάνελ
+	Collapse Panel Group	Σύμπτυξη ομάδας πάνελ
 	Move Panel	Μετακίνηση πάνελ
 	Group with	Ομαδοποίηση με
 	Resize panels	Αλλαγή μεγέθους πάνελ
@@ -3968,7 +3975,7 @@ theme	Appearance	Εμφάνιση
 @msg	give the path `id` and the width point `index`	δώστε το `id` διαδρομής και το `index` σημείου πλάτους
 @msg	guides are locked	οι οδηγοί είναι κλειδωμένοι
 @msg	handle must be in or out	το handle πρέπει να είναι in ή out
-@msg	image '{key}' has no pixels and was left out	η εικόνα '{key}' δεν περιέχει εικονοστοιχεία και παραλείφθηκε
+@msg	an image has no pixels and was left out	παραλείφθηκε εικόνα χωρίς εικονοστοιχεία
 @msg	image data `{_1}` is missing	λείπουν τα δεδομένα εικόνας `{_1}`
 @msg	image would be too large; lower the resolution	η εικόνα θα ήταν υπερβολικά μεγάλη· μειώστε την ανάλυση
 @msg	index must be a number or first, previous, next or last	ο δείκτης πρέπει να είναι αριθμός ή first, previous, next ή last
@@ -4469,6 +4476,12 @@ theme	Appearance	Εμφάνιση
 @msg	before must name a panel	το before πρέπει να ορίζει πίνακα
 @msg	docking action contains an unknown panel or an excessive split path	η ενέργεια σύνδεσης περιέχει άγνωστο πίνακα ή υπερβολικά βαθιά διαδρομή διαίρεσης
 @msg	group must be true or false	το group πρέπει να είναι true ή false
+@msg	panel floats; collapse its group with window.panel.float {panel, collapsed}	Το πάνελ αιωρείται· συμπτύξτε την ομάδα του με window.panel.float {panel, collapsed}
+@msg	panel is not in a dock group	Το πάνελ δεν βρίσκεται σε ομάδα αγκύρωσης
+@msg	only a dock group above or below others collapses, not one beside another	συμπτύσσεται μόνο ομάδα αγκύρωσης πάνω ή κάτω από άλλες, όχι δίπλα σε άλλη
+@msg	icon must be true or false	το icon πρέπει να είναι true ή false
+@msg	icon only docks a panel in the icon column, with no anchor	το icon αγκυρώνει πάνελ μόνο στη στήλη εικονιδίων, χωρίς anchor
+@msg	column docks a set as a dock column, with no anchor or icon	το column αγκυρώνει ένα σύνολο ως στήλη αγκύρωσης, χωρίς anchor ή icon
 @msg	move requires a destination panel	η μετακίνηση απαιτεί πίνακα προορισμού
 @msg	move requires an existing destination panel	η μετακίνηση απαιτεί υπάρχοντα πίνακα προορισμού
 @msg	onto must name a floating panel	το onto πρέπει να ορίζει αιωρούμενο πίνακα
@@ -5224,6 +5237,8 @@ effect	Points	Σημεία
 	Sketch	Σκίτσο
 	Halftone Pattern…	Μοτίβο ημιτόνου…
 	Halftone Pattern	Μοτίβο ημιτόνου
+	Torn Edges…	Ξεσκισμένες άκρες…
+	Torn Edges	Ξεσκισμένες άκρες
 	Pattern Type	Τύπος μοτίβου
 	Dot	Κουκκίδα
 # User Interface › Color Scheme
@@ -5275,9 +5290,11 @@ effect	Points	Σημεία
 @msg	Persistent libraries not found: {files}	Δεν βρέθηκαν μόνιμες βιβλιοθήκες: {files}
 @msg	`{given}` isn't a library panel (see window.swatchLibrary)	Το `{given}` δεν είναι πίνακας βιβλιοθήκης (δείτε window.swatchLibrary)
 @msg	library panel `{given}` isn't open	ο πίνακας βιβλιοθήκης `{given}` δεν είναι ανοιχτός
+@msg	library panel `{given}` isn't missing its library	η βιβλιοθήκη του πίνακα βιβλιοθήκης `{given}` δεν λείπει
 @msg	too many library panels were opened in this session	άνοιξαν πάρα πολλοί πίνακες βιβλιοθηκών σε αυτή τη συνεδρία
 @msg	The image is {_1} × {_2} pixels, more than {LARGE_TRACE_SIDE} on a side: it is traced, but more slowly. A lower-fidelity preset or a smaller copy of the image traces faster.	Η εικόνα είναι {_1} × {_2} εικονοστοιχεία, πάνω από {LARGE_TRACE_SIDE} σε μία πλευρά: ανιχνεύεται, αλλά πιο αργά. Μια προρύθμιση χαμηλότερης πιστότητας ή ένα μικρότερο αντίγραφο της εικόνας ανιχνεύεται γρηγορότερα.
 @msg	The image was traced at {_1} × {_2} pixels, scaled down from {_3} × {_4} ({_5} megapixels at most).	Η εικόνα ανιχνεύτηκε σε {_1} × {_2} εικονοστοιχεία, σμικρυμένη από {_3} × {_4} (το πολύ {_5} megapixel).
+	Gap Length:	Μήκος κενού:
 	Artboard {n} of {total}	Πίνακας σχεδίασης {n} από {total}
 	Encoding and writing the file…	Κωδικοποίηση και εγγραφή του αρχείου…
 @plural	{n} more export waiting|{n} more exports waiting	{n} ακόμη εξαγωγή σε αναμονή|{n} ακόμη εξαγωγές σε αναμονή
@@ -5294,6 +5311,14 @@ effect	Points	Σημεία
 	Full Justify	Στοίχιση και στα δύο άκρα
 	Minimum must not exceed Desired, nor Desired Maximum.	Το ελάχιστο δεν πρέπει να υπερβαίνει το επιθυμητό, ούτε το επιθυμητό το μέγιστο.
 	Justification	Πλήρης στοίχιση
+	Add filters from the list above	Προσθέστε φίλτρα από τη λίστα παραπάνω
+	Add to Stack	Προσθήκη στη στοίβα
+	Applied Filters	Εφαρμοσμένα φίλτρα
+	Categories	Κατηγορίες
+	Choose a filter	Επιλέξτε φίλτρο
+	Effect Gallery	Συλλογή εφέ
+	Filters	Φίλτρα
+	Select artwork to apply effects	Επιλέξτε γραφικά για να εφαρμόσετε εφέ
 @msg	the file's variables and data sets weren't read (variables: {variables}, data sets: {data_sets}): the Variables panel doesn't list them	οι μεταβλητές και τα σύνολα δεδομένων του αρχείου δεν διαβάστηκαν (μεταβλητές: {variables}, σύνολα δεδομένων: {data_sets}): ο πίνακας Μεταβλητές δεν τα εμφανίζει
 # Select by Color (select.color)
 	Select by Color	Επιλογή βάσει χρώματος
@@ -5319,3 +5344,13 @@ effect	Points	Σημεία
 	Water Paper	Βρεγμένο χαρτί
 	Ruby…	Ruby…
 	Ruby	Ruby
+	Ease In	Ομαλή αρχή
+	Ease Out	Ομαλό τέλος
+	Ease In Out	Ομαλή αρχή και τέλος
+	Ease Out In	Ομαλό τέλος και αρχή
+	Ramp:	Ένταση:
+	Shift:	Μετατόπιση:
+	Fresco…	Νωπογραφία…
+	Fresco	Νωπογραφία
+	Effect Gallery…	Συλλογή εφέ…
+	Effect Gallery Dialog	Παράθυρο διαλόγου Συλλογή εφέ

@@ -22,7 +22,7 @@ use std::sync::{Arc, Weak};
 use vectorcraft_color::cms::Cms;
 use vectorcraft_doc::pattern::{Overlap, PatternDef, TileType};
 use vectorcraft_doc::{Document, Node};
-use vectorcraft_geom::{Affine, Rect, Shape};
+use vectorcraft_geom::{Affine, Rect, Shape, Vec2};
 use vello_cpu::peniko::{Extend, ImageQuality, ImageSampler};
 use vello_cpu::{Pixmap, RenderContext};
 
@@ -299,6 +299,22 @@ pub fn render_pattern_swatch(doc: &Document, name: &str, size: u32) -> Option<Re
 }
 
 impl Renderer {
+    /// Dimmed pattern-editing preview copies at `offsets`.
+    fn draw_dimmed_pattern_copies(&mut self, ctx: &mut RenderContext, f: &Frame, dim: f32, offsets: &[Vec2], children: &[Arc<Node>]) {
+        if offsets.is_empty() {
+            return;
+        }
+        let comp = crate::group::Composite { opacity: dim, ..Default::default() };
+        self.group(ctx, f, comp, &mut |r, c, fr| {
+            for o in offsets {
+                let frame = Frame { view: fr.view * Affine::translate(*o), visible: fr.visible - *o, ..*fr };
+                for a in children {
+                    r.draw_arc(c, &frame, a);
+                }
+            }
+        });
+    }
+
     /// Pattern editing mode: draw the tile layer, its dimmed copies and the tile edge instead of
     /// the document. Returns false when not in pattern editing mode.
     pub(crate) fn draw_pattern_edit(&mut self, ctx: &mut RenderContext, f: &Frame) -> bool {
@@ -308,17 +324,13 @@ impl Renderer {
         let children: Vec<Arc<Node>> = layer.children().cloned().unwrap_or_default();
         if layer.visible && !children.is_empty() {
             let dim = (def.dim_copies / 100.0).clamp(0.0, 1.0);
-            let comp = crate::group::Composite { opacity: dim, ..Default::default() };
-            self.group(ctx, f, comp, &mut |r, c, fr| {
-                for o in def.preview_offsets() {
-                    let frame = Frame { view: fr.view * Affine::translate(o), visible: fr.visible - o, ..*fr };
-                    for a in &children {
-                        r.draw_arc(c, &frame, a);
-                    }
-                }
-            });
+            let (before, after) = def.preview_offsets_dimmed_sides();
+            self.draw_dimmed_pattern_copies(ctx, f, dim, &before, &children);
+            self.draw_arc(ctx, f, layer);
+            self.draw_dimmed_pattern_copies(ctx, f, dim, &after, &children);
+        } else {
+            self.draw_arc(ctx, f, layer);
         }
-        self.draw_arc(ctx, f, layer);
         // The tile edge and swatch bounds are editing aids: exports and thumbnails leave them out,
         // as they do guides (#3261).
         if f.opts.skip_templates {

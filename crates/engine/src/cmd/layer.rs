@@ -870,6 +870,11 @@ fn artboard_set(s: &mut Session, p: &Value) -> Result<Value> {
         }
         None => vec![p],
     };
+    check_switches(p, &["moveArt", "scaleArt", "strokes", "corners", "patterns", "lockedAndHidden"], "artboard.setProps")?;
+    for q in &entries {
+        check_switches(q, &["locked"], "artboard.setProps")?;
+        check_numbers(q, &["x", "y", "width", "height"], "artboard.setProps")?;
+    }
     // Scale Artwork with Artboard: resized, an artboard takes the art fully inside it (as Move
     // Artwork with Artboard gathers it) and its guides from the old rectangle onto the new one.
     let scale_art = bool_or(p, "scaleArt", false);

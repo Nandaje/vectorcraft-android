@@ -101,6 +101,14 @@ enum Drag {
     Present,
 }
 
+/// Clear canvas interaction state before a tab transfer takes ownership of the artwork drag.
+pub(crate) fn end_document_drag(ctx: &egui::Context) {
+    ctx.data_mut(|d| {
+        d.remove::<Drag>(drag_id());
+        d.remove::<Pos2>(drag_pos_id());
+    });
+}
+
 fn drag_id() -> egui::Id {
     egui::Id::new("canvas-drag")
 }
@@ -114,7 +122,7 @@ fn drag_layer_id() -> egui::Id {
 }
 /// Whether `p` is over the canvas itself, not a panel or a floating window over it.
 fn on_canvas(ui: &Ui, resp: &egui::Response, p: Pos2) -> bool {
-    ui.clip_rect().contains(p) && ui.ctx().layer_id_at(p).is_none_or(|l| l == resp.layer_id)
+    resp.rect.contains(p) && ui.clip_rect().contains(p) && ui.ctx().layer_id_at(p).is_none_or(|l| l == resp.layer_id)
 }
 /// The document point last sent to the tool as a drag during [`Drag::Tool`].
 fn tool_drag_doc_id() -> egui::Id {
@@ -274,6 +282,7 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     let v = *app.view().unwrap_or(&View::default());
     let xf = Xf::new(rect, &v);
     let origin_preview = if app.ui.view.rulers && app.ui.screen_mode < 3 { ruler_input(app, ui, full, rect, &xf) } else { None };
+    crate::document_drag::drop_on_canvas(app, &resp, &xf);
     panel_drop(app, ui, &resp, &xf);
     // In Presentation Mode a right click or a long touch opens no context menu.
     if app.ui.screen_mode < 3 {
@@ -379,6 +388,7 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
     {
         upload(app, ui.ctx(), &done.img, done.key.pixel.is_some());
         app.canvas.key = Some(done.key);
+        app.canvas.shown = Some((done.doc, done.opts));
         app.perf.render_ms = done.ms;
         app.canvas.last_ms = done.ms;
         app.canvas.moved = done.moved > 0;
@@ -453,13 +463,30 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
         let settling = app.canvas.moved && !key.interacting;
         let staying = key.interacting && app.canvas.from_worker;
         let heavy = (app.canvas.last_ms > 8.0 || settling || staying) && app.canvas.texture.is_some() && same_doc;
-        match (&mut app.canvas.worker, heavy) {
-            (Some(worker), true) => worker.submit(crate::render_worker::Job { key: key.clone(), doc: doc.clone(), w, h, view, opts }),
+        let changed = changed_pixels(app, &key, &doc, &opts, view, w, h);
+        match (&mut app.canvas.worker, heavy, changed) {
+            // Only the document changed since the frame shown, in a part of it: that part is
+            // rendered again, here, into the texture. `last_ms` stays the whole frame's.
+            (_, _, Some(region)) => {
+                let t0 = now_ms();
+                if let (Some([x0, y0, x1, y1]), Some(tex)) = (region, &mut app.canvas.texture) {
+                    let part = app.canvas.renderer.render(&doc, x1 - x0, y1 - y0, Affine::translate((-f64::from(x0), -f64::from(y0))) * view, &opts);
+                    let color = color_image(&part);
+                    let options = if pixel.is_some() { egui::TextureOptions::NEAREST } else { egui::TextureOptions::LINEAR };
+                    tex.set_partial([x0 as usize, y0 as usize], color, options);
+                    app.canvas.moved |= app.canvas.renderer.stats.moved > 0;
+                }
+                app.canvas.key = Some(key.clone());
+                app.canvas.shown = Some((doc.clone(), opts.clone()));
+                app.perf.render_ms = now_ms() - t0;
+            }
+            (Some(worker), true, None) => worker.submit(crate::render_worker::Job { key: key.clone(), doc: doc.clone(), w, h, view, opts }),
             _ => {
                 let t0 = now_ms();
                 let img = app.canvas.renderer.render(&doc, w, h, view, &opts);
                 upload(app, ui.ctx(), &img, pixel.is_some());
                 app.canvas.key = Some(key.clone());
+                app.canvas.shown = Some((doc.clone(), opts.clone()));
                 app.perf.render_ms = now_ms() - t0;
                 app.canvas.last_ms = app.perf.render_ms;
                 app.canvas.moved = app.canvas.renderer.stats.moved > 0;
@@ -795,6 +822,7 @@ fn cursor_icon(c: Cursor) -> egui::CursorIcon {
     }
 }
 
+/// Dispatch canvas pointer, keyboard and drop events through the active document view.
 fn handle_input(app: &mut VectorcraftApp, ui: &Ui, resp: &egui::Response, rect: egui::Rect) {
     let line = ui.ctx().options(|o| o.input_options.line_scroll_speed);
     let wheel_zooms = app.session.prefs.zoom_with_mouse_wheel;
@@ -911,6 +939,7 @@ fn handle_input(app: &mut VectorcraftApp, ui: &Ui, resp: &egui::Response, rect: 
                 // Cmd with another tool drags with the selection tool used last (the session lends it).
                 let ev = PointerEvent { kind: PointerKind::Down, pos: xf.to_doc(p), mods: mods(m, space), pressure: pen_pressure(ui, true) };
                 dispatch(app, &ev, view);
+                crate::document_drag::begin(app, ui.ctx(), ev.pos);
                 Drag::Tool
             };
             ui.data_mut(|dd| {
@@ -1476,7 +1505,7 @@ fn drop_press(app: &mut VectorcraftApp, ui: &Ui, view: vectorcraft_engine::ViewI
 /// canvas, and a panel it is released on takes it (the Graphic Styles panel makes a style of it).
 /// Back on the canvas, [`Drag::Art`] takes the move up again where the pointer is (#2826).
 fn drag_art_out(app: &VectorcraftApp, ui: &Ui, resp: &egui::Response, p: Pos2) -> bool {
-    let off = !ui.clip_rect().contains(p) || ui.ctx().layer_id_at(p).is_some_and(|l| l != resp.layer_id);
+    let off = !on_canvas(ui, resp, p);
     let Some(st) = app.session.active().filter(|_| off && app.session.tool_id() == "selection") else { return false };
     // The Selection tool's interaction while it moves (or Alt-copies) the selection.
     if !st.interaction.as_ref().is_some_and(|i| i.label == "Move" || i.label == "Copy") {
@@ -1491,6 +1520,7 @@ fn drag_art_out(app: &VectorcraftApp, ui: &Ui, resp: &egui::Response, p: Pos2) -
 /// panel that takes the art ([`widgets::PanelDrag::Art`]) takes it where it was, and no move is
 /// left open (#2826). The art stays where it last moved while the pointer is over the panel.
 pub(crate) fn release_over_panel(app: &mut VectorcraftApp, ctx: &egui::Context) {
+    crate::document_drag::cleanup(app, ctx);
     if !ctx.input(|i| i.pointer.primary_released()) {
         return;
     }
@@ -3127,6 +3157,52 @@ pub(crate) fn color_image(img: &vectorcraft_render::Rendered) -> egui::ColorImag
     egui::ColorImage::new(size, pixels)
 }
 
+/// The pixels of the `w`×`h` frame through `view` to render again for `doc`, when only the document
+/// changed since the frame shown (its key `key` but for the revision, and its render options
+/// `opts`), which this thread rendered, and no frame is on its way from the worker: those it
+/// changed in (`Some(None)`: none), grown to whole eighths of the frame, as long as they are at
+/// most half of it. None: render the whole frame. Frames the worker renders stay
+/// whole: its renderer keeps the rasters of the art's effects, this thread's doesn't.
+fn changed_pixels(
+    app: &VectorcraftApp,
+    key: &CacheKey,
+    doc: &vectorcraft_doc::Document,
+    opts: &vectorcraft_render::RenderOptions,
+    view: Affine,
+    w: u32,
+    h: u32,
+) -> Option<Option<[u32; 4]>> {
+    let (shown, _) = app.canvas.shown.as_ref().filter(|(_, o)| o == opts)?;
+    // A viewed opacity mask shows its coverage wherever its art reaches, past its object's bounds.
+    if opts.mask_view.is_some() {
+        return None;
+    }
+    let same_view = app.canvas.key.as_ref().is_some_and(|k| *k == CacheKey { revision: k.revision, ..key.clone() });
+    if !same_view || app.canvas.texture.is_none() || app.canvas.from_worker || app.canvas.worker.as_ref().is_some_and(|w| w.pending.is_some()) {
+        return None;
+    }
+    match vectorcraft_render::changed(shown, doc) {
+        vectorcraft_render::Changed::Nothing => Some(None),
+        vectorcraft_render::Changed::Area(area) => match vectorcraft_render::view_pixels(area, view, w, h) {
+            None => Some(None),
+            Some([x0, y0, x1, y1]) => {
+                let ((x0, x1), (y0, y1)) = (in_steps(x0, x1, w), in_steps(y0, y1, h));
+                (u64::from(x1 - x0) * u64::from(y1 - y0) * 2 <= u64::from(w) * u64::from(h)).then_some(Some([x0, y0, x1, y1]))
+            }
+        },
+        vectorcraft_render::Changed::Everything => None,
+    }
+}
+
+/// `a..b` of `0..n`, grown to whole eighths of `n` and moved back into `0..n`: the parts of a
+/// frame rendered again come in few sizes, which keep the contexts the renderer keeps.
+fn in_steps(a: u32, b: u32, n: u32) -> (u32, u32) {
+    let step = n.div_ceil(8).max(1);
+    let len = (b - a).max(1).div_ceil(step).saturating_mul(step).min(n);
+    let a = a.min(n - len);
+    (a, a + len)
+}
+
 /// Upload the art's raster; Pixel Preview's document pixels keep hard edges when magnified.
 fn upload(app: &mut VectorcraftApp, ctx: &egui::Context, img: &vectorcraft_render::Rendered, pixel: bool) {
     let color = color_image(img);
@@ -4691,6 +4767,69 @@ mod tests {
         (v, out.textures_delta)
     }
 
+    /// An edit of one object renders the canvas again only where it changed, into its texture; a
+    /// change of the view renders all of it.
+    #[test]
+    fn an_edit_renders_only_its_part_of_the_canvas() {
+        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        app.run("file.new", json!({"width":400,"height":300})).unwrap();
+        app.ui.task_bar = false;
+        app.ui.view.rulers = false;
+        app.canvas.worker_started = true; // every frame on this thread, however long it takes
+        let id = app.run("shape.rectangle", json!({"x":50,"y":50,"width":40,"height":30})).unwrap()["id"].as_u64().unwrap();
+        app.run("shape.rectangle", json!({"x":250,"y":200,"width":40,"height":30})).unwrap();
+        app.run("select.none", json!({})).unwrap();
+        let ctx = egui::Context::default();
+        // Where the canvas texture changed in a frame, and how much of it.
+        let canvas = |app: &VectorcraftApp, mut delta: egui::TexturesDelta| {
+            let tex = app.canvas.texture.as_ref().map(|t| t.id());
+            let set = delta.set.iter().find(|(t, _)| tex == Some(**t)).and_then(|(_, d)| d.last()).map(|d| (d.pos, d.image.size()));
+            delta.clear();
+            set
+        };
+        let (_, delta) = frame_output(&mut app, &ctx);
+        assert!(canvas(&app, delta).is_some_and(|(pos, _)| pos.is_none()), "the first frame renders all of it");
+        app.run("paint.setFill", json!({"color": "#ff0000", "ids": [id]})).unwrap();
+        let (_, delta) = frame_output(&mut app, &ctx);
+        let (pos, size) = canvas(&app, delta).expect("the edit shows");
+        let whole = app.canvas.key.as_ref().map(|k| (k.w as usize, k.h as usize)).unwrap();
+        assert!(pos.is_some() && size[0] * size[1] * 10 < whole.0 * whole.1, "a small part of it: {pos:?} {size:?} of {whole:?}");
+        // An edit with other render options than the frame shown's renders all of it.
+        app.session.prefs.pattern_tile_edge_color = "#ff00ff".into();
+        app.run("paint.setFill", json!({"color": "#00ff00", "ids": [id]})).unwrap();
+        let (_, delta) = frame_output(&mut app, &ctx);
+        assert!(canvas(&app, delta).is_some_and(|(pos, _)| pos.is_none()), "other options render all of it");
+        app.run("view.setZoom", json!({"zoom": 2})).unwrap();
+        let (_, delta) = frame_output(&mut app, &ctx);
+        assert!(canvas(&app, delta).is_some_and(|(pos, _)| pos.is_none()), "a new view renders all of it");
+    }
+
+    /// While an opacity mask is viewed, an edit renders all of the canvas: the mask view shows the
+    /// mask's coverage wherever its art reaches, past its object's bounds.
+    #[test]
+    fn an_edit_while_a_mask_is_viewed_renders_all_of_the_canvas() {
+        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        app.run("file.new", json!({"width":400,"height":300})).unwrap();
+        app.ui.task_bar = false;
+        app.ui.view.rulers = false;
+        app.canvas.worker_started = true; // every frame on this thread, however long it takes
+        let rect =
+            |app: &mut VectorcraftApp, x: f64| app.run("shape.rectangle", json!({"x": x, "y": 50, "width": 60, "height": 40})).unwrap()["id"].clone();
+        let (obj, mask) = (rect(&mut app, 50.0), rect(&mut app, 70.0));
+        app.run("select.set", json!({"ids": [obj, mask]})).unwrap();
+        app.run("transparency.makeOpacityMask", json!({})).unwrap();
+        app.run("transparency.viewOpacityMask", json!({})).unwrap();
+        let ctx = egui::Context::default();
+        let (_, mut delta) = frame_output(&mut app, &ctx);
+        delta.clear();
+        app.run("paint.setFill", json!({"color": "#ff0000", "ids": [obj]})).unwrap();
+        let (_, mut delta) = frame_output(&mut app, &ctx);
+        let tex = app.canvas.texture.as_ref().map(|t| t.id());
+        let pos = delta.set.iter().find(|(t, _)| tex == Some(**t)).and_then(|(_, d)| d.last()).map(|d| d.pos);
+        delta.clear();
+        assert_eq!(pos, Some(None), "all of it");
+    }
+
     /// #1278: a segment click marks the edge, not its endpoint anchors or neighboring handles.
     #[test]
     fn a_segment_pick_has_hollow_anchors_and_only_its_own_handles() {
@@ -5298,7 +5437,7 @@ mod tests {
             // Deliver the actual replacement and verify that it replaces the cached key.
             let img = app.canvas.renderer.render(&job.doc, job.w, job.h, job.view, &job.opts);
             let expected = job.key.clone();
-            completed.send(crate::render_worker::Done { key: job.key, img, ms: 1.0, moved: 0 }).unwrap();
+            completed.send(crate::render_worker::Done { key: job.key, doc: job.doc, opts: job.opts, img, ms: 1.0, moved: 0 }).unwrap();
             frame(&mut app, size, new_ppp);
             assert_eq!(app.canvas.key.as_ref(), Some(&expected), "the worker's frame arrived");
         }
@@ -5999,6 +6138,18 @@ mod tests {
         assert_eq!(outlines(&mut app), 0, "Pixel Preview on");
         app.run("view.pixelPreview", json!({})).unwrap();
         assert!(outlines(&mut app) > 0, "Pixel Preview off again");
+    }
+
+    /// View › Snap to Glyph toggles through the View menu command (#3124).
+    #[test]
+    fn snap_to_glyph_menu_command_toggles_the_view_flag() {
+        let mut app = VectorcraftApp::new(vectorcraft_engine::Session::new(), Default::default());
+        app.run("file.new", json!({"width": 200, "height": 200})).unwrap();
+        assert!(!app.ui.view.snap_to_glyph);
+        app.run("view.snapToGlyph", json!({})).unwrap();
+        assert!(app.ui.view.snap_to_glyph);
+        app.run("view.snapToGlyph", json!({})).unwrap();
+        assert!(!app.ui.view.snap_to_glyph);
     }
 
     /// Smart Guides › Object Highlighting (#394): the outline of the object under the pointer

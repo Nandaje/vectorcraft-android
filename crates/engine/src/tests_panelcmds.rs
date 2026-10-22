@@ -265,6 +265,52 @@ fn artboard_copies_refuse_an_index_that_names_no_artboard() {
     assert!(s.clipboard.nodes.is_empty() && s.clipboard.artboards.is_empty(), "nothing copied");
 }
 
+/// Artboard Options, Move Artboard, Duplicate Artboards, Copy Artboard and Cut Artboard refuse an
+/// option given as text or as another value that is not true or false, such as "true", and
+/// Artboard Options and Move Artboard a position, size or move given as text, such as "10". The
+/// artboards, the art, the undo history and the clipboard stay as they were; a null reads as the
+/// option left out.
+#[test]
+fn artboard_commands_refuse_a_boolean_or_number_given_as_text() {
+    use super::tests::{not_a_number, not_a_switch, not_refused};
+    let mut s = session();
+    let r = rect(&mut s);
+    s.execute("artboard.new", &json!({})).unwrap();
+    let mut calls: Vec<_> = [
+        ("artboard.setProps", "scaleArt", json!({"index": 0, "width": 400, "scaleArt": "true"})),
+        ("artboard.setProps", "strokes", json!({"index": 0, "width": 400, "scaleArt": true, "strokes": "false"})),
+        ("artboard.setProps", "corners", json!({"index": 0, "width": 400, "scaleArt": true, "corners": 1})),
+        ("artboard.setProps", "patterns", json!({"index": 0, "x": 50, "moveArt": true, "patterns": "true"})),
+        ("artboard.setProps", "moveArt", json!({"index": 0, "x": 50, "moveArt": "true"})),
+        ("artboard.setProps", "lockedAndHidden", json!({"index": 0, "x": 50, "moveArt": true, "lockedAndHidden": [true]})),
+        ("artboard.setProps", "locked", json!({"artboards": [{"index": 1, "locked": "true"}]})),
+        ("artboard.move", "moveArt", json!({"index": 0, "dx": 10, "moveArt": "true"})),
+        ("artboard.move", "copy", json!({"index": 0, "dx": 10, "copy": 1})),
+        ("artboard.move", "patterns", json!({"index": 0, "dx": 10, "moveArt": true, "patterns": "false"})),
+        ("artboard.duplicate", "patterns", json!({"index": 0, "patterns": "true"})),
+        ("artboard.duplicate", "art", json!({"index": 0, "art": "false"})),
+        ("artboard.copy", "art", json!({"index": 0, "art": "true"})),
+        ("artboard.cut", "art", json!({"index": 1, "art": 0})),
+    ]
+    .into_iter()
+    .map(|(cmd, key, p)| not_a_switch(cmd, p, key))
+    .collect();
+    for (cmd, key, p) in [
+        ("artboard.setProps", "x", json!({"index": 0, "x": "50"})),
+        ("artboard.setProps", "height", json!({"index": 1, "height": [300]})),
+        ("artboard.move", "dx", json!({"index": 0, "dx": "10"})),
+        ("artboard.move", "dy", json!({"index": 0, "dx": 10, "dy": "5"})),
+    ] {
+        calls.push(not_a_number(cmd, p, key));
+    }
+    let wrong = not_refused(&mut s, &calls);
+    assert!(wrong.is_empty(), "not refused: {wrong:#?}");
+    assert!(s.clipboard.nodes.is_empty() && s.clipboard.artboards.is_empty(), "nothing copied");
+    let p = json!({"index": 0, "dx": 10, "dy": null, "moveArt": true, "copy": null, "patterns": false});
+    s.execute("artboard.move", &p).unwrap();
+    assert_eq!(node(&s, r).geometric_bounds().map(|b| b.x0), Some(20.0));
+}
+
 /// Artboards 1 and 2, each with a square on it, and an artboard 3 below artboard 1 with a square on
 /// it, with the Artboard tool selecting artboards 1 and 2 → the squares' ids, artboard by artboard.
 fn two_selected_artboards(s: &mut Session) -> [u64; 3] {

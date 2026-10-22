@@ -150,7 +150,7 @@ fn optical_margin_alignment(s: &mut Session, p: &Value) -> Result<Value> {
         Some(NodeKind::Text(t)) => Some(t.optical_margin),
         _ => None,
     });
-    let on = p.get("on").and_then(Value::as_bool).unwrap_or(!first.unwrap_or(false));
+    let on = switch_or(p, "on", !first.unwrap_or(false), "type.opticalMarginAlignment")?;
     s.edit("Optical Margin Alignment", |d, _| {
         for id in &ids {
             let Some(NodeKind::Text(t)) = d.node_mut(*id).map(|n| &mut n.kind) else {
@@ -168,7 +168,7 @@ fn optical_margin_alignment(s: &mut Session, p: &Value) -> Result<Value> {
 /// setting) on the document and every text object, in one undo step. Off is the default.
 fn system_layout(s: &mut Session, p: &Value) -> Result<Value> {
     let current = s.doc()?.doc.setup.system_layout;
-    let on = p.get("on").and_then(Value::as_bool).unwrap_or(!current);
+    let on = switch_or(p, "on", !current, "type.systemLayout")?;
     s.edit("System Layout", |d, _| {
         d.setup.system_layout = on;
         let mut ids = vec![];
@@ -198,7 +198,7 @@ fn fractional_widths(s: &mut Session, p: &Value) -> Result<Value> {
         Some(NodeKind::Text(t)) => Some(t.fractional_widths),
         _ => None,
     });
-    let on = p.get("on").and_then(Value::as_bool).unwrap_or(!first.unwrap_or(true));
+    let on = switch_or(p, "on", !first.unwrap_or(true), "type.fractionalWidths")?;
     s.edit("Fractional Widths", |d, _| {
         for id in &ids {
             let Some(NodeKind::Text(t)) = d.node_mut(*id).map(|n| &mut n.kind) else {
@@ -219,7 +219,7 @@ fn ruby(s: &mut Session, p: &Value) -> Result<Value> {
     const C: &str = "type.ruby";
     let ids = text_targets(s, p, C)?;
     let range = TextRange::parse(p, C)?;
-    let remove = p.get("remove").and_then(Value::as_bool).unwrap_or(false);
+    let remove = switch_or(p, "remove", false, C)?;
     let reading = str_param(p, "text").map(str::trim).filter(|t| !t.is_empty()).map(str::to_string);
     if !remove && reading.is_none() {
         return Err(bad(C, "give `text` (the reading) or `remove`"));
@@ -235,11 +235,11 @@ fn ruby(s: &mut Session, p: &Value) -> Result<Value> {
         Some("end") | Some("right") | Some("bottom") => RubyAlign::End,
         Some(_) => return Err(bad(C, "`align` is start, center or end")),
     };
-    let size = p.get("size").and_then(Value::as_f64).unwrap_or(50.0);
+    let size = number_or(p, "size", 50.0, C)?;
     if !size.is_finite() || !(1.0..=100.0).contains(&size) {
         return Err(bad(C, "`size` is a percentage of the base text's size, 1 to 100"));
     }
-    let overhang = p.get("overhang").and_then(Value::as_bool).unwrap_or(true);
+    let overhang = switch_or(p, "overhang", true, C)?;
     let mut first: Option<Value> = None;
     s.edit("Ruby", |d, _| {
         for id in &ids {
@@ -890,6 +890,7 @@ fn size_area(t: &mut TextObject, w: Option<f64>, h: Option<f64>) -> bool {
 /// `fitMinPercent`), starting from `cur`. None when `p` sets neither (or only `fitMinPercent`
 /// while the fit isn't Shrink Text).
 pub(crate) fn fit_param(p: &Value, cur: AreaFit, c: &str) -> Result<Option<AreaFit>> {
+    check_numbers(p, &["fitMinPercent"], c)?;
     let min = p.get("fitMinPercent").and_then(Value::as_f64);
     let cur_min = match cur {
         AreaFit::ShrinkText { min_percent } => Some(min_percent),
@@ -942,6 +943,7 @@ const AREA_KEYS: [&str; 7] = ["rows", "columns", "gutter", "inset", "firstBaseli
 
 fn area_options(s: &mut Session, p: &Value) -> Result<Value> {
     const C: &str = "text.areaOptions";
+    check_numbers(p, &["width", "height"], C)?;
     let ids: Vec<NodeId> = {
         let d = &s.doc()?.doc;
         text_targets(s, p, C)?.into_iter().filter(|i| area_text(d.node(*i)).is_some()).collect()
@@ -1236,8 +1238,10 @@ mod area_tests {
         // New type inherits the document's setting.
         let made = s.execute("text.create", &json!({"x": 10, "y": 120, "text": "Z"})).unwrap()["id"].as_u64().unwrap();
         assert!(text(&s, made).system_layout);
-        // A boolean given as text is ignored, so the setting toggles off.
-        assert_eq!(s.execute("type.systemLayout", &json!({"on": "no"})).unwrap()["on"], false);
+        // A boolean given as text is an error, and the setting stays on.
+        assert!(s.execute("type.systemLayout", &json!({"on": "no"})).is_err());
+        assert!(setup(&s).system_layout && text(&s, id).system_layout);
+        assert_eq!(s.execute("type.systemLayout", &json!({"on": false})).unwrap()["on"], false);
         assert!(!setup(&s).system_layout && !text(&s, id).system_layout && !text(&s, made).system_layout);
         s.execute("edit.undo", &json!({})).unwrap();
         assert!(setup(&s).system_layout && text(&s, id).system_layout);
@@ -1282,8 +1286,10 @@ mod area_tests {
         assert!(whole.iter().all(|a| *a >= 1.0 && (a - a.round()).abs() < 1e-9), "{whole:?}");
         assert!(fractional.iter().zip(&whole).any(|(a, b)| (a - b).abs() > 0.05), "{fractional:?} {whole:?}");
         assert_eq!(serde_json::to_value(text(&s)).unwrap()["fractionalWidths"], false);
-        // A boolean given as text is ignored, so the flag toggles back on.
-        assert_eq!(s.execute("type.fractionalWidths", &json!({"on": "no"})).unwrap()["on"], true);
+        // A boolean given as text is an error, and the flag stays off.
+        assert!(s.execute("type.fractionalWidths", &json!({"on": "no"})).is_err());
+        assert!(!text(&s).fractional_widths);
+        assert_eq!(s.execute("type.fractionalWidths", &json!({})).unwrap()["on"], true);
         assert!(text(&s).fractional_widths);
         assert_eq!(s.execute("type.fractionalWidths", &json!({"on": false})).unwrap()["on"], false);
         assert!(!text(&s).fractional_widths);
@@ -1599,6 +1605,47 @@ mod area_tests {
         }
     }
 
+    /// Character Direction (Character panel menu, Middle Eastern options): a character attribute
+    /// that `text.setFormat` and `text.setRangeStyle` set in one undo step each, saved only when
+    /// set and kept by a native save.
+    #[test]
+    fn character_direction_is_a_character_attribute_saved_only_when_set() {
+        use vectorcraft_doc::ParaDirection;
+        let mut s = Session::new();
+        s.execute("file.new", &json!({"width": 400, "height": 400})).unwrap();
+        let id = s.execute("text.create", &json!({"x": 10, "y": 50, "text": "שלום 21 10 2026"})).unwrap()["id"].as_u64().unwrap();
+        let runs = |s: &Session| match &s.doc().unwrap().doc.node(NodeId(id)).unwrap().kind {
+            NodeKind::Text(t) => t.runs.clone(),
+            _ => panic!("text"),
+        };
+        let set = |s: &Session| runs(s).iter().map(|r| (r.text.clone(), r.style.char_direction)).collect::<Vec<_>>();
+        assert_eq!(runs(&s)[0].style.char_direction, None);
+        assert!(serde_json::to_value(&runs(&s)[0].style).unwrap().get("charDirection").is_none());
+        s.execute("select.set", &json!({"ids": [id]})).unwrap();
+        for (key, want) in [("rightToLeft", Some(ParaDirection::RightToLeft)), ("leftToRight", Some(ParaDirection::LeftToRight)), ("default", None)] {
+            s.execute("text.setFormat", &json!({"charDirection": key})).unwrap();
+            assert!(runs(&s).iter().all(|r| r.style.char_direction == want));
+            let saved = serde_json::to_value(&runs(&s)[0].style).unwrap();
+            assert_eq!(saved.get("charDirection").and_then(|v| v.as_str()), want.is_some().then_some(key));
+        }
+        let err = s.execute("text.setFormat", &json!({"charDirection": "up"})).unwrap_err().to_string();
+        assert!(err.contains("`charDirection` must be"), "{err}");
+        // Characters selected with the Type tool: only the range takes it (שלום and the space are 9 bytes).
+        s.execute("text.setRangeStyle", &json!({"id": id, "start": 9, "end": 19, "charDirection": "leftToRight"})).unwrap();
+        assert_eq!(set(&s), [("שלום ".to_string(), None), ("21 10 2026".to_string(), Some(ParaDirection::LeftToRight))]);
+        s.execute("edit.undo", &json!({})).unwrap();
+        assert!(runs(&s).iter().all(|r| r.style.char_direction.is_none()));
+        s.execute("edit.redo", &json!({})).unwrap();
+        // Saved and reopened as it was.
+        let back = vectorcraft_format::load(&vectorcraft_format::save(&s.doc().unwrap().doc, false)).unwrap();
+        let NodeKind::Text(t) = &back.node(NodeId(id)).unwrap().kind else { panic!("text") };
+        let reopened: Vec<_> = t.runs.iter().map(|r| (r.text.clone(), r.style.char_direction)).collect();
+        assert_eq!(reopened, set(&s));
+        // A character style captured from the characters carries it, Default included.
+        assert_eq!(super::super::textstyles::char_attrs(&runs(&s)[1].style)["charDirection"], "leftToRight");
+        assert_eq!(super::super::textstyles::char_attrs(&runs(&s)[0].style).get("charDirection"), Some(&serde_json::Value::Null));
+    }
+
     /// Proportional Metrics (#966): a character attribute, saved only when on.
     #[test]
     fn proportional_metrics_is_a_character_attribute_saved_only_when_on() {
@@ -1625,6 +1672,36 @@ mod area_tests {
         let old = serde_json::to_value(&runs(&s)[0].style).unwrap();
         assert!(old.get("proportionalMetrics").is_none());
         assert!(!serde_json::from_value::<vectorcraft_doc::CharStyle>(old).unwrap().proportional_metrics);
+    }
+
+    /// Tate-chu-yoko (Character panel menu, East Asian options): a character attribute, saved only
+    /// when on. Documents written before it read as off.
+    #[test]
+    fn tate_chu_yoko_is_a_character_attribute_saved_only_when_on() {
+        let mut s = Session::new();
+        s.execute("file.new", &json!({"width": 400, "height": 400})).unwrap();
+        let id = s.execute("text.create", &json!({"x": 10, "y": 50, "text": "2026年"})).unwrap()["id"].as_u64().unwrap();
+        let runs = |s: &Session| match &s.doc().unwrap().doc.node(NodeId(id)).unwrap().kind {
+            NodeKind::Text(t) => t.runs.clone(),
+            _ => panic!("text"),
+        };
+        assert!(!runs(&s)[0].style.tate_chu_yoko);
+        assert!(serde_json::to_value(&runs(&s)[0].style).unwrap().get("tateChuYoko").is_none());
+        s.execute("select.set", &json!({"ids": [id]})).unwrap();
+        s.execute("text.setFormat", &json!({"tateChuYoko": true})).unwrap();
+        assert!(runs(&s).iter().all(|r| r.style.tate_chu_yoko));
+        assert_eq!(serde_json::to_value(&runs(&s)[0].style).unwrap()["tateChuYoko"], true);
+        s.execute("edit.undo", &json!({})).unwrap();
+        assert!(!runs(&s)[0].style.tate_chu_yoko);
+        // The year only (2026 is 4 bytes); 年 stays unmarked.
+        s.execute("text.setRangeStyle", &json!({"id": id, "start": 0, "end": 4, "tateChuYoko": true})).unwrap();
+        let on: Vec<_> = runs(&s).iter().map(|r| (r.text.clone(), r.style.tate_chu_yoko)).collect();
+        assert_eq!(on, [("2026".to_string(), true), ("年".to_string(), false)]);
+        let old = serde_json::to_value(&runs(&s)[1].style).unwrap();
+        assert!(old.get("tateChuYoko").is_none());
+        assert!(!serde_json::from_value::<vectorcraft_doc::CharStyle>(old).unwrap().tate_chu_yoko);
+        s.execute("text.setFormat", &json!({"tateChuYoko": false})).unwrap();
+        assert!(runs(&s).iter().all(|r| !r.style.tate_chu_yoko));
     }
 
     /// No Break is a character attribute, saved only when on.

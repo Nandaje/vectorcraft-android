@@ -207,6 +207,7 @@ fn rect_transform(r: Rect, p: &Value, cmd: &str) -> Result<Affine> {
 }
 
 fn rectangle(s: &mut Session, p: &Value) -> Result<Value> {
+    check_numbers(p, &["radius"], "shape.rectangle")?;
     let r = rect_of(p, "shape.rectangle")?;
     let radius = f64_or(p, "radius", 0.0).max(0.0);
     let live = LiveShape::Rectangle {
@@ -230,6 +231,7 @@ fn ellipse(s: &mut Session, p: &Value) -> Result<Value> {
 fn polygon(s: &mut Session, p: &Value) -> Result<Value> {
     let c = Point::new(f64_req(p, "cx", "shape.polygon")?, f64_req(p, "cy", "shape.polygon")?);
     let r = f64_req(p, "radius", "shape.polygon")?.abs();
+    check_numbers(p, &["sides", "rotation"], "shape.polygon")?;
     let sides = p.get("sides").and_then(Value::as_u64).unwrap_or(6).clamp(3, 1000) as u32;
     let rot = f64_or(p, "rotation", 0.0);
     let xf = Affine::translate(c.to_vec2()) * Affine::rotate(rot.to_radians());
@@ -240,6 +242,7 @@ fn polygon(s: &mut Session, p: &Value) -> Result<Value> {
 fn star(s: &mut Session, p: &Value) -> Result<Value> {
     let c = Point::new(f64_req(p, "cx", "shape.star")?, f64_req(p, "cy", "shape.star")?);
     let r1 = f64_req(p, "radius1", "shape.star")?.abs();
+    check_numbers(p, &["radius2", "points", "rotation"], "shape.star")?;
     let r2 = f64_or(p, "radius2", r1 / 2.0).abs();
     let n = p.get("points").and_then(Value::as_u64).unwrap_or(5).clamp(2, 1000) as u32;
     let path = shapes::star(c, r1, r2, n, f64_or(p, "rotation", 0.0));
@@ -251,6 +254,24 @@ fn star(s: &mut Session, p: &Value) -> Result<Value> {
 fn flare(s: &mut Session, p: &Value) -> Result<Value> {
     use vectorcraft_color::{BlendMode, Gradient, GradientGeom, GradientKind, GradientPaint, GradientStop, Paint};
     let c = Point::new(f64_req(p, "cx", "shape.flare")?, f64_req(p, "cy", "shape.flare")?);
+    let numbers = [
+        "diameter",
+        "opacity",
+        "brightness",
+        "growth",
+        "fuzziness",
+        "rays",
+        "longest",
+        "rayFuzziness",
+        "rings",
+        "largest",
+        "x2",
+        "y2",
+        "direction",
+        "pathLength",
+        "seed",
+    ];
+    check_numbers(p, &numbers, "shape.flare")?;
     let pct = |k: &str, d: f64| (f64_or(p, k, d) / 100.0).clamp(0.0, 10.0);
     let r = (f64_or(p, "diameter", 100.0) / 2.0).max(0.5);
     let opacity = pct("opacity", 50.0).min(1.0) as f32;
@@ -360,12 +381,13 @@ fn line(s: &mut Session, p: &Value) -> Result<Value> {
 
 fn spiral(s: &mut Session, p: &Value) -> Result<Value> {
     let c = Point::new(f64_req(p, "cx", "shape.spiral")?, f64_req(p, "cy", "shape.spiral")?);
+    check_numbers(p, &["segments"], "shape.spiral")?;
     let path = shapes::spiral(
         c,
         f64_req(p, "radius", "shape.spiral")?,
-        f64_or(p, "decay", 80.0),
+        number_or(p, "decay", 80.0, "shape.spiral")?,
         p.get("segments").and_then(Value::as_u64).unwrap_or(10).clamp(2, 1000) as u32,
-        bool_or(p, "clockwise", true),
+        switch_or(p, "clockwise", true, "shape.spiral")?,
     );
     add_art(s, "Spiral", path_kind(path, None), None)
 }
@@ -373,7 +395,7 @@ fn spiral(s: &mut Session, p: &Value) -> Result<Value> {
 fn arc(s: &mut Session, p: &Value) -> Result<Value> {
     let a = Point::new(f64_req(p, "x1", "shape.arc")?, f64_req(p, "y1", "shape.arc")?);
     let b = Point::new(f64_req(p, "x2", "shape.arc")?, f64_req(p, "y2", "shape.arc")?);
-    add_art(s, "Arc", path_kind(shapes::arc(a, b, 0.0, bool_or(p, "closed", false)), None), None)
+    add_art(s, "Arc", path_kind(shapes::arc(a, b, 0.0, switch_or(p, "closed", false, "shape.arc")?), None), None)
 }
 
 /// The grid `paths` (bottom first) as one selected group in the new-art stroke, filled with the
@@ -406,9 +428,11 @@ fn grid_group(s: &mut Session, label: &str, paths: Vec<PathData>, fill: bool) ->
     Ok(json!({ "id": id.0 }))
 }
 
-/// A grid's divider count `count` with its skew `key` in percent (0 when absent, clamped to
-/// ±[`shapes::GRID_SKEW_MAX`]).
+/// A grid's divider count `count` (an error unless it is a number or null; 5 unless it is a JSON
+/// integer of 0 or more, so 4.0 and 2.5 give 5; at most 999) with its skew `key` in percent (0 when
+/// absent, clamped to ±[`shapes::GRID_SKEW_MAX`]).
 fn dividers(p: &Value, count: &str, key: &str, cmd: &str) -> Result<(u32, f64)> {
+    check_numbers(p, &[count], cmd)?;
     let n = p.get(count).and_then(Value::as_u64).unwrap_or(5).min(999) as u32;
     let skew = match p.get(key) {
         None | Some(Value::Null) => 0.0,
@@ -466,6 +490,8 @@ pub(crate) fn anchor_from_json(v: &Value, cmd: &str) -> Result<Anchor> {
 }
 
 fn path_create(s: &mut Session, p: &Value) -> Result<Value> {
+    // Checked with `d` too, where the path data alone decides whether the path is closed.
+    let closed = switch_or(p, "closed", false, "path.create")?;
     let path = if let Some(d) = str_param(p, "d") {
         let bp = vectorcraft_geom::BezPath::from_svg(d).map_err(|e| bad("path.create", format!("bad path data: {e}")))?;
         PathData::from_bezpath(&bp)
@@ -480,7 +506,7 @@ fn path_create(s: &mut Session, p: &Value) -> Result<Value> {
         if anchors.is_empty() {
             return Err(bad("path.create", "need at least one anchor"));
         }
-        PathData::single(SubPath::new(anchors, bool_or(p, "closed", false)))
+        PathData::single(SubPath::new(anchors, closed))
     };
     let mut look = s.new_art_look(s.paint.fill.clone(), s.paint.stroke.clone(), s.paint.stroke_width);
     // Open paths drawn with a stroke of None would be invisible: mimic Illustrator and keep what the user set.
@@ -495,6 +521,11 @@ fn text_create(s: &mut Session, p: &Value) -> Result<Value> {
     let x = f64_req(p, "x", "text.create")?;
     let y = f64_req(p, "y", "text.create")?;
     super::paint::check_keep_model(p, "text.create")?;
+    check_numbers(p, &["size"], "text.create")?;
+    check_switches(p, &["vertical", "placeholder"], "text.create")?;
+    if let Some(a) = p.get("area") {
+        check_numbers(a, &["width", "height"], "text.create")?;
+    }
     let text = str_param(p, "text").unwrap_or("");
     let mut t = TextObject::point(Point::new(x, y), text, new_type_style(s, p));
     t.vertical = p.get("vertical").and_then(Value::as_bool).unwrap_or(false);

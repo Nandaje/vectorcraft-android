@@ -44,6 +44,20 @@ pub fn flat_button(ui: &mut Ui, text: &str, width: f32) -> Response {
     resp
 }
 
+/// A [`flat_button`] that expands to fit localized labels wider than `min_width`.
+pub fn flat_button_fit(ui: &mut Ui, text: &str, min_width: f32) -> Response {
+    let t = Tokens::get(ui.ctx());
+    let galley = ui.painter().layout_no_wrap(tl!(text).to_string(), egui::FontId::proportional(12.5), t.text_strong);
+    let width = (galley.size().x + 24.0).max(min_width);
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, 24.0), Sense::click());
+    let rect = rect.shrink2(vec2(0.0, 0.5));
+    ui.painter().rect_filled(rect, CornerRadius::same(5), t.button);
+    flat_fill(ui, rect, &resp);
+    ui.painter().with_clip_rect(rect).text(rect.center(), egui::Align2::CENTER_CENTER, tl!(text), egui::FontId::proportional(12.5), t.text_strong);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, ui.is_enabled(), tl!(text)));
+    resp
+}
+
 /// Width of a [`split_button`]'s arrow.
 pub const SPLIT_ARROW: f32 = 18.0;
 
@@ -825,7 +839,7 @@ pub fn chip_button_named(ui: &mut Ui, size: f32, chevron: bool, tip: &str, draw:
 }
 
 /// What the user did on a [`fill_stroke_proxy`].
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ProxyClicks {
     pub fill: bool,
     pub stroke: bool,
@@ -833,6 +847,10 @@ pub struct ProxyClicks {
     pub default: bool,
     /// Double-clicked a square: open the Color Picker for it (`true` = the stroke).
     pub pick: Option<bool>,
+    /// A paint dragged from the other proxy (or a swatch) dropped on the fill square.
+    pub dropped_fill: Option<serde_json::Value>,
+    /// A paint dropped on the stroke square.
+    pub dropped_stroke: Option<serde_json::Value>,
 }
 
 /// The Fill/Stroke proxy pair (two overlapping squares). `mixed` (fill, stroke) draws a "?" square
@@ -845,6 +863,8 @@ pub fn fill_stroke_proxy(ui: &mut Ui, fill: &Paint, stroke: &Paint, mixed: (bool
     let stroke_r = Rect::from_min_size(rect.max - Vec2::splat(s), Vec2::splat(s));
     let stroke_resp = ui.interact(stroke_r, ui.id().with("stroke-proxy"), Sense::click_and_drag());
     let fill_resp = ui.interact(fill_r, ui.id().with("fill-proxy"), Sense::click_and_drag());
+    let dropped_fill = if mixed.0 { None } else { proxy_paint_drop(ui, &fill_resp) };
+    let dropped_stroke = if mixed.1 { None } else { proxy_paint_drop(ui, &stroke_resp) };
     // A proxy drags its paint (onto the Swatches panel or art), unless it shows "?".
     for (resp, paint, mixed) in [(&fill_resp, fill, mixed.0), (&stroke_resp, stroke, mixed.1)] {
         if !mixed {
@@ -901,7 +921,24 @@ pub fn fill_stroke_proxy(ui: &mut Ui, fill: &Paint, stroke: &Paint, mixed: (bool
         swap: swap.on_hover_text(tl!("Swap Fill and Stroke (Shift+X)")).clicked(),
         default: def.on_hover_text(tl!("Default Fill and Stroke (D)")).clicked(),
         pick,
+        dropped_fill,
+        dropped_stroke,
     }
+}
+
+/// A [`PanelDrag::Paint`] released on a Fill/Stroke proxy square: highlight while held over it.
+fn proxy_paint_drop(ui: &Ui, resp: &Response) -> Option<serde_json::Value> {
+    if let Some(drag) = resp.dnd_hover_payload::<PanelDrag>()
+        && let PanelDrag::Paint { params, .. } = &*drag
+        && !params.is_null()
+    {
+        let t = Tokens::get(ui.ctx());
+        ui.painter().rect_stroke(resp.rect, 0.0, Stroke::new(2.0, t.accent), StrokeKind::Outside);
+    }
+    resp.dnd_release_payload::<PanelDrag>().and_then(|d| {
+        let PanelDrag::Paint { params, .. } = &*d else { return None };
+        (!params.is_null()).then_some(params.clone())
+    })
 }
 
 /// A compact dropdown of interface labels (shown in the UI language). Returns the chosen index.
@@ -2843,5 +2880,26 @@ mod combo_keyboard_tests {
         assert!(picked.is_some(), "an option was picked");
         frame(&ctx, vec![], &mut picked);
         assert!(!egui::Popup::is_any_open(&ctx), "the list closes after a keyboard pick");
+    }
+}
+
+#[cfg(test)]
+mod button_tests {
+    use super::*;
+
+    /// [`flat_button_fit`] preserves minimum width for short labels and expands for long ones.
+    #[test]
+    fn flat_button_fit_expands_for_long_text() {
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let raw = egui::RawInput::default();
+        let mut out = ctx.run_ui(raw, |ui| {
+            let resp_short = flat_button_fit(ui, "OK", 100.0);
+            assert_eq!(resp_short.rect.width(), 100.0);
+
+            let resp_long = flat_button_fit(ui, "Çalışma Yüzeylerini Düzenle", 100.0);
+            assert!(resp_long.rect.width() > 160.0);
+        });
+        out.textures_delta.clear();
     }
 }

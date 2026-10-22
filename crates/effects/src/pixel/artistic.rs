@@ -1,4 +1,4 @@
-//! Effect › Artistic (Colored Pencil, Cutout, Dry Brush, Film Grain, Neon Glow, Paint Daubs, Palette Knife, Plastic Wrap, Poster
+//! Effect › Artistic (Colored Pencil, Cutout, Dry Brush, Film Grain, Fresco, Neon Glow, Paint Daubs, Palette Knife, Plastic Wrap, Poster
 //! Edges, Rough Pastels, Smudge Stick, Sponge, Underpainting and Watercolor). Original filters built from
 //! public behaviour documentation:
 //! <https://helpx.adobe.com/illustrator/using/summary-effects.html> and
@@ -10,7 +10,7 @@ use std::f64::consts::TAU;
 use super::brushstrokes::{LEFT, RIGHT, Smear, TONE_SOFTNESS, mix, streak, stroke_reach, unit, unpremultiply};
 use super::edges::sobel;
 use super::pixelate::{Around, Place, Soft, cell, point_in, rand, value_noise};
-use super::texture::{self, Light, Texture, Tones, luma, premultiply, straight, texturizer};
+use super::texture::{self, Light, Texture, Tones, luma, premultiply, smooth_noise, straight, texturizer};
 use super::{PixelSpace, blur_plane, pick};
 use vectorcraft_geom::{Point, Vec2};
 
@@ -72,6 +72,7 @@ pub(super) fn paint_daub_radius(size: f64) -> f64 {
     size.clamp(1.0, 50.0) * 0.48
 }
 const SALT_PENCIL: u64 = 304;
+const SALT_FRESCO: u64 = 320;
 
 /// Keep the last cell's four corner values: magnified adjacent pixels often share a cell.
 /// The cache changes only cost, never the field, and needs constant storage per raster.
@@ -424,6 +425,59 @@ pub(super) fn paint_daubs(px: &mut [[u8; 4]], w: usize, h: usize, space: &PixelS
 fn rough_bristle(p: Point, k: u64) -> f32 {
     let (Some(i), Some(j)) = (cell(p.x * 3.7), cell(p.y * 3.7)) else { return 0.5 };
     rand(SALT_DAUB + 3, i, j, k) as f32
+}
+
+/// Fresco: coarse brush dabs on a plaster wall. `brush_size` (1..10) sets dab spacing,
+/// `brush_detail` (0..10) keeps sharper edges when high, and `texture` (1..3) deepens the
+/// relief. Coverage is kept.
+pub(super) fn fresco(px: &mut [[u8; 4]], w: usize, h: usize, space: &PixelSpace, brush_size: f64, brush_detail: f64, texture: f64) {
+    if !([brush_size, brush_detail, texture].iter().all(|v| v.is_finite()) && space.px.is_finite() && space.px > 0.0) {
+        return;
+    }
+    let Some(place) = Place::new(space, w, h) else { return };
+    let brush_size = brush_size.clamp(1.0, 10.0);
+    let brush_detail = brush_detail.clamp(0.0, 10.0);
+    let texture = texture.round().clamp(1.0, 3.0);
+    let side = 2.0 + 1.8 * brush_size;
+    let sigma = (0.15 * (10.0 - brush_detail) * brush_size / place.px).max(0.0);
+    let soft = Soft::new(px, w, sigma);
+    let tex_strength = 0.08 + 0.07 * (texture - 1.0);
+    let tex_scale = 3.0 / texture;
+    let streak_mix = 0.25 * (1.0 - brush_detail / 10.0);
+    place.each(px, |x, y, p| {
+        if p[3] == 0 {
+            return;
+        }
+        let q = place.at(x, y);
+        let (Some(i), Some(j)) = (cell(q.x / side), cell(q.y / side)) else { return };
+        let jx = (rand(SALT_FRESCO, i, j, 0) - 0.5) * 0.35 * side;
+        let jy = (rand(SALT_FRESCO, i, j, 1) - 0.5) * 0.35 * side;
+        let sample = Point::new(q.x + jx, q.y + jy);
+        let mut sampled = soft.at(place.index(sample));
+        if sampled[3] <= 0.0 {
+            sampled = soft.at(place.index(q));
+        }
+        if sampled[3] <= 0.0 {
+            return;
+        }
+        let [r, g, b, alpha] = sampled;
+        let c = [r, g, b].map(|v| v / alpha);
+        let angle = TAU * rand(SALT_FRESCO, i, j, 2);
+        let (fx, fy) = (q.x - i as f64 * side, q.y - j as f64 * side);
+        let along = fx * angle.cos() + fy * angle.sin();
+        let streak = (1.0 - streak_mix * (0.5 + 0.5 * (along / side).sin().powi(2))) as f32;
+        let bump = (1.0 + tex_strength * smooth_noise(SALT_FRESCO + 3, q, tex_scale * side)) as f32;
+        let lit = c.map(|v| (v * streak * bump).clamp(0.0, 1.0));
+        *p = premultiply(lit, f32::from(p[3]) / 255.0);
+    });
+}
+
+/// How far (document units) a Fresco dab can reach from a pixel.
+pub(super) fn fresco_reach(brush_size: f64, brush_detail: f64) -> f64 {
+    let brush_size = brush_size.clamp(1.0, 10.0);
+    let brush_detail = brush_detail.clamp(0.0, 10.0);
+    let side = 2.0 + 1.8 * brush_size;
+    side + 0.15 * (10.0 - brush_detail) * brush_size
 }
 
 /// How far (document units) Plastic Wrap's softened relief is sampled at `smoothness` (1..15).

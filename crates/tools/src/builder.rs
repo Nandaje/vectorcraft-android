@@ -72,7 +72,17 @@ pub fn path_contains(path: &PathData, rule: FillRule, p: Point) -> bool {
 
 /// The face of `group` under `p` (front-most).
 pub fn face_at(group: &Node, p: Point) -> Option<&Arc<Node>> {
-    faces(group).into_iter().rev().find(|f| f.path_data().is_some_and(|pd| path_contains(pd, FillRule::NonZero, p)))
+    front_face(faces(group).into_iter(), p)
+}
+
+/// The face of `group` under `p` (front-most) among its faces that are not hidden.
+pub fn visible_face_at(group: &Node, p: Point) -> Option<&Arc<Node>> {
+    front_face(faces(group).into_iter().filter(|f| f.visible), p)
+}
+
+/// The face of `faces` (paint order) under `p` (front-most).
+fn front_face<'a>(faces: impl DoubleEndedIterator<Item = &'a Arc<Node>>, p: Point) -> Option<&'a Arc<Node>> {
+    faces.rev().find(|f| f.path_data().is_some_and(|pd| path_contains(pd, FillRule::NonZero, p)))
 }
 
 /// The edge of `group` nearest to `p` within `tol`.
@@ -99,11 +109,11 @@ fn nearest_edge<'a>(edges: impl IntoIterator<Item = &'a Arc<Node>>, p: Point, to
     best.map(|b| b.1)
 }
 
-/// The visible Live Paint group with a face under `p` (front-most in paint order).
+/// The visible Live Paint group with a face under `p` that is not hidden (front-most in paint order).
 pub fn live_paint_at(doc: &Document, p: Point) -> Option<NodeId> {
     let mut hit = None;
     doc.walk(|n| {
-        if is_live_paint(n) && doc.is_visible(n.id) && face_at(n, p).is_some() {
+        if is_live_paint(n) && doc.is_visible(n.id) && visible_face_at(n, p).is_some() {
             hit = Some(n.id);
         }
     });
@@ -243,11 +253,16 @@ impl BuilderMap {
     /// `open_filled_as_closed` (Consider Open Filled Paths as Closed), a filled open path bounds a
     /// region as if an invisible edge closed it; without it, the path cuts like a line.
     pub fn new<'a>(doc: &'a Document, roots: &[NodeId], with_edges: bool, open_filled_as_closed: bool) -> (Self, Vec<&'a Node>) {
+        Self::with_gap(doc, roots, with_edges, open_filled_as_closed, 0.0)
+    }
+
+    /// The same arrangement with Gap Detection, using the shared Live Paint gap finder.
+    pub fn with_gap<'a>(doc: &'a Document, roots: &[NodeId], with_edges: bool, open_filled_as_closed: bool, gap: f64) -> (Self, Vec<&'a Node>) {
         let (shapes, leaves) = shape_builder_shapes(doc, roots, open_filled_as_closed);
         if shapes.is_empty() {
             return (Self::default(), leaves);
         }
-        let arr = po::shape_builder(&shapes, with_edges);
+        let arr = po::shape_builder_with_gap(&shapes, with_edges, gap);
         let bounded = |pieces: Vec<po::Shape>| {
             pieces
                 .into_iter()
@@ -432,6 +447,8 @@ struct RegionCache {
     live: bool,
     /// The map has the Shape Builder's outline edges.
     edges: bool,
+    /// Gap Detection distance; changing tool options invalidates the cache.
+    gap: f64,
 }
 
 impl RegionCache {
@@ -449,7 +466,7 @@ impl RegionCache {
                 let regions = if shapes.is_empty() { vec![] } else { faces_of(po::live_paint(&shapes).0) };
                 BuilderMap { regions, ..Default::default() }
             } else {
-                BuilderMap::new(cx.doc, &roots, edges, open_filled_as_closed).0
+                BuilderMap::with_gap(cx.doc, &roots, edges, open_filled_as_closed, self.gap).0
             };
             self.key = Some(key);
             self.edges = edges;
@@ -462,6 +479,10 @@ impl RegionCache {
 }
 
 // ---------- Shape Builder ----------
+
+pub use po::SHAPE_BUILDER_MAX_GAP;
+/// Small, Medium and Large gap lengths in points.
+pub const GAP_LENGTHS: [f64; 3] = [3.0, 6.0, 12.0];
 
 /// Shape Builder Tool Options (double-click the tool; `tool.setOption`), kept across tool switches
 /// and saved with the preferences.
@@ -486,11 +507,23 @@ pub struct ShapeBuilderOptions {
     /// Highlight Fill (`highlightFill`, on): in merge mode, the regions under the pointer or
     /// touched by the drag are shaded with a gray mesh. When it is off, they are not highlighted.
     pub highlight_fill: bool,
+    /// Close gaps up to `gap_length` while finding regions.
+    pub gap_detection: bool,
+    /// Gap Length in points (at most [`SHAPE_BUILDER_MAX_GAP`]).
+    pub gap_length: f64,
 }
 
 impl Default for ShapeBuilderOptions {
     fn default() -> Self {
-        Self { open_filled_as_closed: true, swatches: false, cursor_swatch_preview: false, straight_line: false, highlight_fill: true }
+        Self {
+            open_filled_as_closed: true,
+            swatches: false,
+            cursor_swatch_preview: false,
+            straight_line: false,
+            highlight_fill: true,
+            gap_detection: false,
+            gap_length: GAP_LENGTHS[0],
+        }
     }
 }
 
@@ -550,6 +583,10 @@ pub struct ShapeBuilderTool {
 const LINE_TOL_PX: f64 = 4.0;
 
 impl ShapeBuilderTool {
+    fn gap(&self) -> f64 {
+        if self.opts.gap_detection { self.opts.gap_length } else { 0.0 }
+    }
+
     fn line_tol(cx: &ToolContext, alt: bool) -> Option<f64> {
         alt.then(|| cx.tol(LINE_TOL_PX))
     }
@@ -655,7 +692,7 @@ impl Tool for ShapeBuilderTool {
                 let pts: Vec<Value> = points.iter().map(|q| json!([q.x, q.y])).collect();
                 // The mode the drag started in, which its highlight showed.
                 let erase = self.alt;
-                let mut params = json!({ "ids": json_ids(&roots), "points": pts, "erase": erase });
+                let mut params = json!({ "ids": json_ids(&roots), "points": pts, "erase": erase, "gap": self.gap() });
                 if let Some(t) = Self::line_tol(cx, erase) {
                     params["tolerance"] = json!(t);
                 }
@@ -751,6 +788,8 @@ impl Tool for ShapeBuilderTool {
             "cursorSwatchPreview": o.cursor_swatch_preview,
             "selection": if o.straight_line { "straightLine" } else { "freeform" },
             "highlightFill": o.highlight_fill,
+            "gapDetection": o.gap_detection,
+            "gapLength": o.gap_length,
         })
     }
 
@@ -762,8 +801,16 @@ impl Tool for ShapeBuilderTool {
             "cursorSwatchPreview" => o.cursor_swatch_preview = v.as_bool().unwrap_or(o.cursor_swatch_preview),
             "selection" => o.straight_line = v.as_str().map_or(o.straight_line, |s| s == "straightLine"),
             "highlightFill" => o.highlight_fill = v.as_bool().unwrap_or(o.highlight_fill),
+            "gapDetection" => o.gap_detection = v.as_bool().unwrap_or(o.gap_detection),
+            "gapLength" => {
+                if let Some(n) = v.as_f64().filter(|n| n.is_finite()) {
+                    o.gap_length = n.clamp(0.0, SHAPE_BUILDER_MAX_GAP);
+                }
+            }
             _ => {}
         }
+        self.cache.key = None;
+        self.cache.gap = self.gap();
     }
 }
 
@@ -780,14 +827,14 @@ enum LpHover {
     Region(usize),
 }
 
-/// The Live Paint group and part the Live Paint tools hover and click at `p`. Inside a face of a
-/// visible Live Paint group ([`live_paint_at`]) it is that group with its face under `p`, or with
-/// `edge` its visible edge nearest `p` within `tol` (None when there is none). Outside every face,
-/// with `edge`, it is the visible edge nearest `p` within `tol` among the visible Live Paint groups
-/// (the front-most group's on a tie). None when no group is found.
+/// The Live Paint group and part the Live Paint tools hover and click at `p`. Inside a visible face
+/// of a visible Live Paint group ([`live_paint_at`]) it is that group with its visible face under
+/// `p`, or with `edge` its visible edge nearest `p` within `tol` (None when there is none). Outside
+/// every visible face, with `edge`, it is the visible edge nearest `p` within `tol` among the
+/// visible Live Paint groups (the front-most group's on a tie). None when no group is found.
 fn lp_part_at(doc: &Document, p: Point, tol: f64, edge: bool) -> Option<(NodeId, Option<&Arc<Node>>)> {
     if let Some(g) = live_paint_at(doc, p).and_then(|id| doc.node(id)) {
-        return Some((g.id, if edge { visible_edge_near(g, p, tol) } else { face_at(g, p) }));
+        return Some((g.id, if edge { visible_edge_near(g, p, tol) } else { visible_face_at(g, p) }));
     }
     if !edge {
         return None;
@@ -1415,6 +1462,49 @@ mod tests {
                 want.map(|(g, ..)| Action::Exec("livePaint.strokeEdge".into(), json!({ "group": g.0, "point": [x, 50.0], "tolerance": 4.0 })));
             assert_eq!(bucket.pointer(&cx, &ev(PointerKind::Down, x, 50.0).with_mods(shift)), stroked.into_iter().collect::<Vec<_>>(), "x {x}");
         }
+    }
+
+    #[test]
+    fn live_paint_tools_skip_hidden_faces() {
+        let mut d = Document::new(500.0, 500.0);
+        let (back, [_, _, back_right, _]) = live_square(&mut d, Rect::new(0.0, 0.0, 100.0, 100.0));
+        let (front, _) = live_square(&mut d, Rect::new(50.0, 0.0, 150.0, 100.0));
+        let face = |g: NodeId| faces(d.node(g).unwrap())[0].id;
+        let (back_face, hidden) = (face(back), face(front));
+        // The front group's face is hidden on its own; both groups stay visible.
+        d.node_mut(hidden).unwrap().visible = false;
+        let s = Selection::default();
+        let p = paint();
+        let cx = cx(&d, &s, &p);
+        let alt = Mods { alt: true, ..Default::default() };
+        let part = |ov: &[Overlay]| match ov {
+            [] => None,
+            [Overlay::Path { path, .. }] => Some(path.bounding_box()),
+            _ => panic!("{ov:?}"),
+        };
+        // Where the faces overlap, both tools take the back group's face under the hidden one.
+        let mut bucket = LivePaintBucketTool::default();
+        bucket.pointer(&cx, &ev(PointerKind::Move, 75.0, 50.0));
+        assert_eq!(part(&bucket.overlays(&cx)), Some(Rect::new(0.0, 0.0, 100.0, 100.0)));
+        let fill = Action::Exec("livePaint.fill".into(), json!({ "group": back.0, "point": [75.0, 50.0] }));
+        assert_eq!(bucket.pointer(&cx, &ev(PointerKind::Down, 75.0, 50.0)), vec![fill]);
+        let mut sel = LivePaintSelectionTool::default();
+        sel.pointer(&cx, &ev(PointerKind::Move, 75.0, 50.0));
+        assert_eq!(part(&sel.overlays(&cx)), Some(Rect::new(0.0, 0.0, 100.0, 100.0)));
+        assert_eq!(sel.pointer(&cx, &ev(PointerKind::Down, 75.0, 50.0)), vec![Action::Exec("select.set".into(), json!({ "ids": [back_face.0] }))]);
+        // Over the hidden face alone, neither tool highlights or picks a face.
+        bucket.pointer(&cx, &ev(PointerKind::Move, 125.0, 50.0));
+        assert_eq!(part(&bucket.overlays(&cx)), None);
+        assert!(bucket.pointer(&cx, &ev(PointerKind::Down, 125.0, 50.0)).is_empty());
+        sel.pointer(&cx, &ev(PointerKind::Move, 125.0, 50.0));
+        assert_eq!(part(&sel.overlays(&cx)), None);
+        assert_eq!(sel.pointer(&cx, &ev(PointerKind::Down, 125.0, 50.0)), vec![Action::Exec("select.none".into(), json!({}))]);
+        // Inside the hidden face, 1.5 pt from the back group's right side, Alt-click takes that side
+        // as it does outside every face.
+        sel.pointer(&cx, &ev(PointerKind::Move, 101.5, 50.0).with_mods(alt));
+        assert_eq!(part(&sel.overlays(&cx)), Some(Rect::new(100.0, 0.0, 100.0, 100.0)));
+        let picked = sel.pointer(&cx, &ev(PointerKind::Down, 101.5, 50.0).with_mods(alt));
+        assert_eq!(picked, vec![Action::Exec("select.set".into(), json!({ "ids": [back_right.0] }))]);
     }
 
     #[test]

@@ -18,7 +18,7 @@ pub const KIND: &str = "shapeBuilderOptions";
 pub(super) const SPEC: DialogSpec = DialogSpec { heading, body, confirm, min_width: 360.0, ..DialogSpec::FORM };
 
 /// The options the dialog edits.
-const KEYS: [&str; 5] = ["openFilledAsClosed", "pickColorFrom", "cursorSwatchPreview", "selection", "highlightFill"];
+const KEYS: [&str; 7] = ["openFilledAsClosed", "pickColorFrom", "cursorSwatchPreview", "selection", "highlightFill", "gapDetection", "gapLength"];
 
 /// Width of the label column.
 const LABEL_W: f32 = 110.0;
@@ -37,6 +37,24 @@ pub fn open(app: &mut VectorcraftApp) -> Value {
 }
 
 fn body(_app: &mut VectorcraftApp, ui: &mut egui::Ui, d: &mut Dialog) -> bool {
+    form::check(ui, d, "gapDetection", tl!("Gap Detection"));
+    ui.add_enabled_ui(d.bool("gapDetection"), |ui| {
+        widgets::label_row(ui, tl!("Gap Length:"), LABEL_W, |ui| {
+            let lengths = vectorcraft_tools::builder::GAP_LENGTHS;
+            let len = d.f64("gapLength", lengths[0]);
+            let current = lengths.iter().position(|n| *n == len).unwrap_or(3);
+            let labels = [tl!("Small"), tl!("Medium"), tl!("Large"), tl!("Custom")];
+            if let Some(i) = widgets::dropdown(ui, "shape-builder-gap", labels[current], &labels, 120.0) {
+                d.fields.insert("gapLength".into(), json!(lengths.get(i).copied().unwrap_or(9.0)));
+            }
+            ui.add_enabled_ui(current == 3, |ui| {
+                if let Some(n) = widgets::plain_field(ui, "shape-builder-gap-length", len, "pt", 1, 64.0) {
+                    d.fields.insert("gapLength".into(), json!(n.clamp(0.0, vectorcraft_tools::builder::SHAPE_BUILDER_MAX_GAP)));
+                }
+            });
+        });
+    });
+    ui.add_space(8.0);
     form::check(ui, d, "openFilledAsClosed", tl!("Consider Open Filled Paths as Closed"));
     ui.add_space(8.0);
     let sources = [("artwork", tl!("Artwork")), ("swatches", tl!("Color Swatches"))];
@@ -82,6 +100,22 @@ mod tests {
     }
 
     #[test]
+    fn gap_options_share_the_existing_dialog_and_custom_is_capped() {
+        let mut a = app();
+        a.run("tool.options", json!({"tool": "shapeBuilder"})).unwrap();
+        let text = painted(&mut a);
+        assert!(text.contains("Gap Detection") && text.contains("Gap Length:"), "{text}");
+        let d = a.ui.dialog.as_mut().unwrap();
+        d.fields.insert("gapDetection".into(), json!(true));
+        d.fields.insert("gapLength".into(), json!(1000));
+        super::super::confirm(&mut a).unwrap();
+        let opts = a.session.tool_options_of("shapeBuilder");
+        assert_eq!(opts["gapLength"], 72.0);
+        assert_eq!(opts["gapDetection"], true);
+        assert_eq!(opts["openFilledAsClosed"], true);
+    }
+
+    #[test]
     fn double_clicking_the_tool_opens_its_options_and_ok_keeps_them() {
         let mut app = app();
         let r = app.run("tool.options", json!({"tool": "shapeBuilder"})).unwrap();
@@ -124,7 +158,7 @@ mod tests {
         let o = app.session.tool_options_of("shapeBuilder");
         assert_eq!(
             o,
-            json!({"openFilledAsClosed": false, "pickColorFrom": "swatches", "cursorSwatchPreview": true, "selection": "straightLine", "highlightFill": false})
+            json!({"openFilledAsClosed": false, "pickColorFrom": "swatches", "cursorSwatchPreview": true, "selection": "straightLine", "highlightFill": false, "gapDetection": false, "gapLength": 3.0})
         );
         app.run("tool.options", json!({"tool": "shapeBuilder"})).unwrap();
         let d = app.ui.dialog.as_ref().unwrap();

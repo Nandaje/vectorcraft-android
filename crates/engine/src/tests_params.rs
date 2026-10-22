@@ -139,6 +139,46 @@ fn effect_params_are_the_effects_own() {
     assert!(s.check_params("effect.setParams", &json!({"index": 7, "params": {"blurr": 3}})).is_ok());
 }
 
+/// The Transform effect (`distort.transform`) is held to its params description: `effect.apply`
+/// and `effect.setParams` refuse each of its on/off options given as text, such as `reflectX:
+/// "false"`, and each of its numbers given as text, such as `copies: "0"`, and leave the effect
+/// as it was; true, false and numbers pass. The loop takes the keys from the effect's defaults, so
+/// an option the effect gains is checked too.
+#[test]
+fn transform_effect_refuses_a_boolean_or_number_given_as_text() {
+    let info = vectorcraft_render::effects::effect_info("distort.transform").unwrap();
+    let one = |key: &str, v: serde_json::Value| serde_json::Value::Object([(key.to_string(), v)].into_iter().collect());
+    let apply = |params| json!({"effect": "distort.transform", "params": params});
+    let mut s = Session::new();
+    s.execute("file.new", &json!({})).unwrap();
+    s.execute("shape.rectangle", &json!({"x": 10, "y": 10, "width": 50, "height": 40})).unwrap();
+    s.execute("effect.apply", &apply(json!({"moveH": 20}))).unwrap();
+    let state = |s: &Session| {
+        let st = s.doc().unwrap();
+        (st.history.undo.len(), st.doc.layers[0].children().unwrap()[0].appearance.effects[0].params.clone())
+    };
+    let before = state(&s);
+    let mut switches = vec![];
+    for (key, default) in info.defaults.as_object().unwrap() {
+        let why = match default {
+            serde_json::Value::Bool(_) => format!("`{key}` must be true or false"),
+            serde_json::Value::Number(_) => format!("`{key}` must be a number"),
+            _ => continue,
+        };
+        if default.is_boolean() {
+            switches.push(key.as_str());
+        }
+        let text = json!(default.to_string());
+        assert_eq!(refusal("effect.apply", apply(one(key, text.clone()))), why);
+        let e = s.execute("effect.setParams", &json!({"index": 0, "params": one(key, text)})).unwrap_err().to_string();
+        assert!(e.contains(&why), "{e}");
+        assert!(check_params("effect.apply", &apply(one(key, default.clone()))).is_ok(), "{key}");
+    }
+    assert!(["reflectX", "reflectY", "random"].iter().all(|k| switches.contains(k)), "{switches:?}");
+    assert_eq!(state(&s), before);
+    s.execute("effect.setParams", &json!({"index": 0, "params": {"reflectX": true, "random": false, "copies": 2}})).unwrap();
+}
+
 /// What a command notes for its journal entry is a key its description names, so the entry
 /// passes the check a caller's params get.
 #[test]

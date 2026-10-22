@@ -554,6 +554,7 @@
 	Close All	Đóng tất cả
 	Close Library	Đóng thư viện
 	Close Panel	Đóng bảng
+	Collapse Panel Group	Thu gọn nhóm bảng
 	Close Path	Đóng đường dẫn
 	Close paths when ends are within:	Đóng đường dẫn khi hai đầu cách nhau trong:
 	Clumped	Dạng cụm
@@ -875,6 +876,7 @@
 	Differences from {preset}:	Khác biệt so với {preset}:
 	Diffuse Glow	Ánh sáng khuếch tán
 	Diffuse Glow…	Ánh sáng khuếch tán…
+	Character Direction	Hướng ký tự
 	Digits	Chữ số
 	Dim Copies to:	Làm mờ bản sao đến:
 	Dim Images to:	Làm mờ ảnh đến:
@@ -1230,6 +1232,11 @@
 	Fidelity:	Độ trung thực:
 	Figure Space	Khoảng trắng chữ số
 	Figure:	Chữ số:
+# Artwork drag between document tabs.
+	Drop Artwork	Thả hình đồ họa
+@msg	{key} must be [x, y] with finite coordinates	{key} phải là [x, y] với tọa độ hữu hạn
+@msg	ids must contain 1–10000 object ids	ids phải chứa từ 1 đến 10000 mã định danh đối tượng
+
 	File	Tệp
 	File Dimensions	Kích thước tệp
 	File Format:	Định dạng tệp:
@@ -4241,9 +4248,15 @@ theme	Appearance	Giao diện
 @msg	give the path `id` and the width point `index`	hãy cung cấp `id` đường dẫn và `index` điểm chiều rộng
 @msg	gradient “{name}” isn't defined in the file: a plain colour stands in for it	chuyển sắc “{name}” không được định nghĩa trong tệp: một màu đơn thay thế
 @msg	group must be true or false	group phải là true hoặc false
+@msg	icon must be true or false	icon phải là true hoặc false
+@msg	icon only docks a panel in the icon column, with no anchor	icon chỉ neo bảng vào cột biểu tượng, không có anchor
+@msg	column docks a set as a dock column, with no anchor or icon	column neo một bộ thành cột neo, không có anchor hay icon
+@msg	panel floats; collapse its group with window.panel.float {panel, collapsed}	bảng đang nổi; hãy thu gọn nhóm của nó bằng window.panel.float {panel, collapsed}
+@msg	panel is not in a dock group	bảng không thuộc nhóm nào của dock
+@msg	only a dock group above or below others collapses, not one beside another	chỉ thu gọn được nhóm dock nằm trên hoặc dưới các nhóm khác, không phải nhóm nằm cạnh
 @msg	guides are locked	đường căn bị khóa
 @msg	handle must be in or out	handle phải là in hoặc out
-@msg	image '{key}' has no pixels and was left out	ảnh '{key}' không có pixel và bị bỏ qua
+@msg	an image has no pixels and was left out	một ảnh không có pixel đã bị bỏ qua
 @msg	image data `{_1}` is missing	dữ liệu ảnh `{_1}` bị thiếu
 @msg	image is empty	ảnh trống
 @msg	Image Trace: the traced image is missing	Vector hóa ảnh: ảnh đã vector hóa bị thiếu
@@ -4866,6 +4879,8 @@ theme	Appearance	Giao diện
 	Sketch	Phác thảo
 	Halftone Pattern…	Mẫu bán sắc…
 	Halftone Pattern	Mẫu bán sắc
+	Torn Edges…	Cạnh rách…
+	Torn Edges	Cạnh rách
 	Pattern Type	Loại mẫu
 	Dot	Chấm
 # User Interface › Color Scheme
@@ -4917,9 +4932,11 @@ theme	Appearance	Giao diện
 @msg	Persistent libraries not found: {files}	Không tìm thấy thư viện lưu giữ: {files}
 @msg	`{given}` isn't a library panel (see window.swatchLibrary)	`{given}` không phải là bảng thư viện (xem window.swatchLibrary)
 @msg	library panel `{given}` isn't open	bảng thư viện `{given}` chưa được mở
+@msg	library panel `{given}` isn't missing its library	thư viện của bảng thư viện `{given}` không bị thiếu
 @msg	too many library panels were opened in this session	đã mở quá nhiều bảng thư viện trong phiên này
 @msg	The image is {_1} × {_2} pixels, more than {LARGE_TRACE_SIDE} on a side: it is traced, but more slowly. A lower-fidelity preset or a smaller copy of the image traces faster.	Ảnh có kích thước {_1} × {_2} điểm ảnh, hơn {LARGE_TRACE_SIDE} ở một cạnh: ảnh vẫn được dò, nhưng chậm hơn. Một thiết lập sẵn có độ trung thực thấp hơn hoặc một bản sao nhỏ hơn của ảnh sẽ dò nhanh hơn.
 @msg	The image was traced at {_1} × {_2} pixels, scaled down from {_3} × {_4} ({_5} megapixels at most).	Ảnh đã được dò ở {_1} × {_2} điểm ảnh, thu nhỏ từ {_3} × {_4} (tối đa {_5} megapixel).
+	Gap Length:	Độ dài khoảng hở:
 	Artboard {n} of {total}	Bảng vẽ {n} / {total}
 	Encoding and writing the file…	Đang mã hóa và ghi tệp…
 @plural	{n} more export waiting|{n} more exports waiting	Còn {n} lượt xuất đang chờ
@@ -4937,6 +4954,14 @@ theme	Appearance	Giao diện
 	Minimum must not exceed Desired, nor Desired Maximum.	Giá trị tối thiểu không được vượt quá giá trị mong muốn, và giá trị mong muốn không được vượt quá tối đa.
 	Minimum	Tối thiểu
 	Justification	Căn đều
+	Add filters from the list above	Thêm bộ lọc từ danh sách phía trên
+	Add to Stack	Thêm vào ngăn xếp
+	Applied Filters	Bộ lọc đã áp dụng
+	Categories	Danh mục
+	Choose a filter	Chọn bộ lọc
+	Effect Gallery	Thư viện hiệu ứng
+	Filters	Bộ lọc
+	Select artwork to apply effects	Chọn đồ họa để áp dụng hiệu ứng
 @msg	the file's variables and data sets weren't read (variables: {variables}, data sets: {data_sets}): the Variables panel doesn't list them	các biến và tập dữ liệu của tệp chưa được đọc (biến: {variables}, tập dữ liệu: {data_sets}): bảng Biến không liệt kê chúng
 # Select by Color (select.color)
 	Select by Color	Chọn theo màu
@@ -4962,3 +4987,13 @@ theme	Appearance	Giao diện
 	Water Paper	Giấy ướt
 	Ruby…	Ruby…
 	Ruby	Ruby
+	Ease In	Chậm lúc đầu
+	Ease Out	Chậm lúc cuối
+	Ease In Out	Chậm lúc đầu và cuối
+	Ease Out In	Chậm lúc cuối và đầu
+	Ramp:	Cường độ:
+	Shift:	Dịch chuyển:
+	Fresco…	Bích họa…
+	Fresco	Bích họa
+	Effect Gallery…	Thư viện hiệu ứng…
+	Effect Gallery Dialog	Hộp thoại Thư viện hiệu ứng

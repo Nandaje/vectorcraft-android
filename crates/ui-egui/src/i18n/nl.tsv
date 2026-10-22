@@ -20,6 +20,11 @@
 	Medium Light	Gemiddeld licht
 	Light	Licht
 	Quit VectorCraft	VectorCraft afsluiten
+# Artwork drag between document tabs.
+	Drop Artwork	Illustratie neerzetten
+@msg	{key} must be [x, y] with finite coordinates	{key} moet [x, y] met eindige coördinaten zijn
+@msg	ids must contain 1–10000 object ids	ids moet 1–10000 object-id’s bevatten
+
 	File	Bestand
 	New…	Nieuw…
 	New Without Dialog	Nieuw zonder dialoogvenster
@@ -775,6 +780,7 @@
 	Activate Panel	Paneel activeren
 	Change Panel Layout	Paneelindeling wijzigen
 	Close Panel	Paneel sluiten
+	Collapse Panel Group	Paneelgroep samenvouwen
 	Move Panel	Paneel verplaatsen
 	Group with	Groeperen met
 	Resize panels	Panelen van formaat wijzigen
@@ -1325,6 +1331,7 @@ lighting	Light	Licht
 	Leading	Regelafstand
 	No Break	Niet afbreken
 	Proportional Metrics	Proportionele metingen
+	Character Direction	Tekenrichting
 	Digits	Cijfers
 	Arabic	Arabisch
 	Hindi	Hindi
@@ -4026,7 +4033,7 @@ imageTrace	Outline	Contour
 @msg	give horizontal or vertical	geef horizontaal of verticaal
 @msg	give the path `id` and the width point `index`	geef het `id` van het pad en de `index` van het breedtepunt
 @msg	guides are locked	de hulplijnen zijn vergrendeld
-@msg	image '{key}' has no pixels and was left out	afbeelding '{key}' heeft geen pixels en is weggelaten
+@msg	an image has no pixels and was left out	een afbeelding zonder pixels is weggelaten
 @msg	image data `{_1}` is missing	afbeeldingsgegevens `{_1}` ontbreken
 @msg	image would be too large; lower the resolution	de afbeelding zou te groot worden; verlaag de resolutie
 @msg	index must be a number or first, previous, next or last	index moet een getal zijn of first, previous, next of last
@@ -4462,6 +4469,12 @@ imageTrace	Outline	Contour
 @msg	before must name a panel	before moet een paneel benoemen
 @msg	docking action contains an unknown panel or an excessive split path	dokactie bevat een onbekend paneel of een overmatig splitspad
 @msg	group must be true or false	group moet true of false zijn
+@msg	panel floats; collapse its group with window.panel.float {panel, collapsed}	paneel zweeft; vouw de groep samen met window.panel.float {panel, collapsed}
+@msg	panel is not in a dock group	paneel staat niet in een dockgroep
+@msg	only a dock group above or below others collapses, not one beside another	alleen een dockgroep boven of onder andere vouwt samen, niet een ernaast
+@msg	icon must be true or false	icon moet true of false zijn
+@msg	icon only docks a panel in the icon column, with no anchor	icon dockt een paneel alleen in de pictogramkolom, zonder anchor
+@msg	column docks a set as a dock column, with no anchor or icon	column dockt een set als dockkolom, zonder anchor of icon
 @msg	move requires a destination panel	move vereist een doelpaneel
 @msg	move requires an existing destination panel	move vereist een bestaand doelpaneel
 @msg	onto must name a floating panel	onto moet een zwevend paneel benoemen
@@ -5144,6 +5157,8 @@ swatch	Bright Violet	Felviolet
 	Sketch	Schets
 	Halftone Pattern…	Rasterpatroon…
 	Halftone Pattern	Rasterpatroon
+	Torn Edges…	Gescheurde randen…
+	Torn Edges	Gescheurde randen
 	Pattern Type	Patroontype
 	Dot	Punt
 	Export Type:	Exporttype:
@@ -5289,6 +5304,7 @@ swatch	Bright Violet	Felviolet
 	Typing	Typen
 	Persistent	Permanent
 	Library Panel Options	Opties voor bibliotheekpaneel
+	Gap Length:	Lengte van opening:
 	Locate Library…	Bibliotheek lokaliseren…
 
 @msg	Save writes {_1}, not {_2}: use file.saveAsTemplate to write it	Opslaan schrijft {_1}, niet {_2}: gebruik file.saveAsTemplate om het te schrijven
@@ -5318,6 +5334,7 @@ swatch	Bright Violet	Felviolet
 @msg	Persistent libraries not found: {files}	Permanente bibliotheken niet gevonden: {files}
 @msg	`{given}` isn't a library panel (see window.swatchLibrary)	`{given}` is geen bibliotheekpaneel (zie window.swatchLibrary)
 @msg	library panel `{given}` isn't open	bibliotheekpaneel `{given}` is niet geopend
+@msg	library panel `{given}` isn't missing its library	de bibliotheek van bibliotheekpaneel `{given}` ontbreekt niet
 @msg	too many library panels were opened in this session	er zijn in deze sessie te veel bibliotheekpanelen geopend
 @msg	The image is {_1} × {_2} pixels, more than {LARGE_TRACE_SIDE} on a side: it is traced, but more slowly. A lower-fidelity preset or a smaller copy of the image traces faster.	De afbeelding is {_1} × {_2} pixels, meer dan {LARGE_TRACE_SIDE} aan één zijde: ze wordt getraceerd, maar langzamer. Een voorinstelling met minder detail of een kleinere kopie van de afbeelding traceert sneller.
 @msg	The image was traced at {_1} × {_2} pixels, scaled down from {_3} × {_4} ({_5} megapixels at most).	De afbeelding is getraceerd op {_1} × {_2} pixels, verkleind van {_3} × {_4} (maximaal {_5} megapixels).
@@ -5337,6 +5354,14 @@ swatch	Bright Violet	Felviolet
 	Full Justify	Volledig uitvullen
 	Minimum must not exceed Desired, nor Desired Maximum.	Minimum mag niet groter zijn dan Gewenst, en Gewenst niet groter dan Maximum.
 	Justification	Uitvullen
+	Add filters from the list above	Voeg filters toe uit de lijst hierboven
+	Add to Stack	Toevoegen aan stapel
+	Applied Filters	Toegepaste filters
+	Categories	Categorieën
+	Choose a filter	Kies een filter
+	Effect Gallery	Effectgalerij
+	Filters	Filters
+	Select artwork to apply effects	Selecteer grafiek om effecten toe te passen
 # Select by Color (select.color)
 	Select by Color	Selecteren op kleur
 	Smudge Stick…	Uitsmeerstift…
@@ -5382,3 +5407,13 @@ swatch	Bright Violet	Felviolet
 	Water Paper	Nat papier
 	Ruby…	Ruby…
 	Ruby	Ruby
+	Ease In	Langzaam beginnen
+	Ease Out	Langzaam eindigen
+	Ease In Out	Langzaam beginnen en eindigen
+	Ease Out In	Langzaam eindigen en beginnen
+	Ramp:	Sterkte:
+	Shift:	Verschuiving:
+	Fresco…	Fresco…
+	Fresco	Fresco
+	Effect Gallery…	Effectgalerij…
+	Effect Gallery Dialog	Dialoogvenster Effectgalerij

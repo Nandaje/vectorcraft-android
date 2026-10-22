@@ -569,6 +569,9 @@ pub(crate) struct Exporter<'a> {
     lab_spots: Vec<(String, vectorcraft_color::cms::Lab)>,
     /// Images may ask viewers to smooth them (not in PDF/A).
     interpolate: bool,
+    /// Images may have 16 bits a sample (PDF 1.5 and later); in earlier files they are written at
+    /// 8 bits ([`embed`]).
+    sixteen_bit: bool,
     /// How images are resampled and compressed.
     compression: &'a crate::CompressionSettings,
     /// Layers whose Print option is off are written too.
@@ -629,6 +632,8 @@ impl<'a> Exporter<'a> {
             knockout: doc.page_knockout,
             lab_spots: vec![],
             interpolate: set.standard != Standard::PdfA2b,
+            // PDF 1.3 and 1.4 files are written with the PDF 1.4 settings ([`Writer::new`]).
+            sixteen_bit: !matches!(set.compatibility, Compatibility::Pdf13 | Compatibility::Pdf14),
             compression: &set.compression,
             non_printing: false,
             intent: vectorcraft_color::cms::active().settings().intent,
@@ -1791,7 +1796,7 @@ impl Exporter<'_> {
             if let Some(w) = r.warning {
                 self.warn(w);
             }
-            r.image.or_else(|| embed(blob, interpolate))
+            r.image.or_else(|| embed(blob, interpolate, self.sixteen_bit))
         });
         if img.is_none() {
             self.warn(UNDECODED);
@@ -1851,11 +1856,41 @@ fn placed_size(im: &vectorcraft_doc::ImageObject) -> (f64, f64) {
     (im.width as f64 * a.hypot(b), im.height as f64 * c.hypot(d))
 }
 
+/// Does PNG `bytes` have 16 bits a sample: the bit depth of its IHDR chunk, which follows the
+/// signature?
+fn png_16_bit(bytes: &[u8]) -> bool {
+    bytes.get(12..16) == Some(b"IHDR".as_slice()) && bytes.get(24) == Some(&16)
+}
+
+/// PNG `bytes` at 8 bits a sample: decoded, and encoded again as gray or RGB, with alpha when the
+/// source has it, and with the source's ICC profile. `None` when it can't be decoded.
+fn png_8_bit(bytes: &[u8]) -> Option<Vec<u8>> {
+    use image::{ColorType, DynamicImage, ImageDecoder, ImageEncoder};
+    let mut decoder = image::codecs::png::PngDecoder::new(std::io::Cursor::new(bytes)).ok()?;
+    let icc = decoder.icc_profile().ok().flatten();
+    let img = DynamicImage::from_decoder(decoder).ok()?;
+    let img = match img.color() {
+        ColorType::L8 | ColorType::L16 => DynamicImage::ImageLuma8(img.into_luma8()),
+        ColorType::La8 | ColorType::La16 => DynamicImage::ImageLumaA8(img.into_luma_alpha8()),
+        ColorType::Rgb8 | ColorType::Rgb16 => DynamicImage::ImageRgb8(img.into_rgb8()),
+        _ => DynamicImage::ImageRgba8(img.into_rgba8()),
+    };
+    let mut png = vec![];
+    let mut encoder = image::codecs::png::PngEncoder::new(&mut png);
+    if let Some(icc) = icc {
+        encoder.set_icc_profile(icc).ok()?;
+    }
+    img.write_with_encoder(encoder).ok()?;
+    Some(png)
+}
+
 /// Image `blob` as it is: PNG, JPEG, GIF and WebP through the PDF writer (JPEG data unchanged),
-/// other formats decoded.
-fn embed(blob: &vectorcraft_doc::ImageBlob, interpolate: bool) -> Option<Image> {
+/// other formats decoded. Without `sixteen_bit` (a file before PDF 1.5), a PNG of 16 bits a
+/// sample is written at 8 bits ([`png_8_bit`]).
+fn embed(blob: &vectorcraft_doc::ImageBlob, interpolate: bool, sixteen_bit: bool) -> Option<Image> {
     let bytes = blob.bytes.as_ref().clone();
     let direct = match blob.mime.as_str() {
+        "image/png" if !sixteen_bit && png_16_bit(&bytes) => png_8_bit(&bytes).and_then(|png| Image::from_png(png.into(), interpolate).ok()),
         "image/png" => Image::from_png(bytes.clone().into(), interpolate).ok(),
         "image/jpeg" | "image/jpg" => Image::from_jpeg(bytes.clone().into(), interpolate).ok(),
         "image/gif" => Image::from_gif(bytes.clone().into(), interpolate).ok(),
@@ -1892,5 +1927,23 @@ mod tests {
         s.pop();
         s.finish();
         page.finish();
+    }
+
+    #[test]
+    fn a_16_bit_png_at_8_bits_keeps_its_color_type_and_icc_profile() {
+        use image::{ImageDecoder, ImageEncoder};
+        let icc = vectorcraft_color::cms::icc_bytes(vectorcraft_color::cms::GRAY).unwrap().to_vec();
+        let gray = image::DynamicImage::ImageLuma16(image::ImageBuffer::from_fn(4, 2, |x, y| image::Luma([x as u16 * 20000 + y as u16])));
+        let mut png = vec![];
+        let mut encoder = image::codecs::png::PngEncoder::new(&mut png);
+        encoder.set_icc_profile(icc.clone()).unwrap();
+        gray.write_with_encoder(encoder).unwrap();
+        assert!(png_16_bit(&png));
+        let out = png_8_bit(&png).unwrap();
+        assert!(!png_16_bit(&out));
+        let mut decoder = image::codecs::png::PngDecoder::new(std::io::Cursor::new(out.as_slice())).unwrap();
+        assert_eq!(decoder.icc_profile().unwrap(), Some(icc));
+        assert_eq!(decoder.color_type(), image::ColorType::L8);
+        assert_eq!(image::DynamicImage::from_decoder(decoder).unwrap().to_luma8(), gray.to_luma8());
     }
 }

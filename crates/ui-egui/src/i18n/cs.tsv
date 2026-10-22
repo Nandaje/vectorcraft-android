@@ -34,6 +34,11 @@
 	Medium Light	Středně světlý
 	Light	Světlý
 	Quit VectorCraft	Ukončit VectorCraft
+# Artwork drag between document tabs.
+	Drop Artwork	Umístit grafiku
+@msg	{key} must be [x, y] with finite coordinates	{key} musí být [x, y] s konečnými souřadnicemi
+@msg	ids must contain 1–10000 object ids	ids musí obsahovat 1–10000 identifikátorů objektů
+
 	File	Soubor
 	New…	Nový…
 	New Without Dialog	Nový bez dialogového okna
@@ -829,6 +834,7 @@
 	Activate Panel	Aktivovat panel
 	Change Panel Layout	Změnit rozložení panelů
 	Close Panel	Zavřít panel
+	Collapse Panel Group	Sbalit skupinu panelů
 	Move Panel	Přesunout panel
 	Group with	Seskupit s
 	Resize panels	Změnit velikost panelů
@@ -1393,6 +1399,7 @@ lighting	Light	Světlo
 	Leading	Proklad
 	No Break	Nezalamovat
 	Proportional Metrics	Proporcionální metrika
+	Character Direction	Směr znaků
 	Digits	Číslice
 	Arabic	Arabské
 	Hindi	Hindské
@@ -4290,7 +4297,7 @@ imageTrace	Outline	Obrys
 @msg	give the path `id` and the width point `index`	zadejte `id` cesty a `index` bodu šířky
 @msg	guides are locked	vodítka jsou zamčená
 @msg	handle must be in or out	handle musí být in nebo out
-@msg	image '{key}' has no pixels and was left out	obrázek '{key}' nemá žádné obrazové body a byl vynechán
+@msg	an image has no pixels and was left out	obrázek bez obrazových bodů byl vynechán
 @msg	image data `{_1}` is missing	chybí obrazová data `{_1}`
 @msg	image would be too large; lower the resolution	obraz by byl příliš velký; snižte rozlišení
 @msg	index must be a number or first, previous, next or last	index musí být číslo nebo first, previous, next či last
@@ -4752,6 +4759,12 @@ imageTrace	Outline	Obrys
 @msg	before must name a panel	before musí určovat panel
 @msg	docking action contains an unknown panel or an excessive split path	akce ukotvení obsahuje neznámý panel nebo příliš dlouhou cestu rozdělení
 @msg	group must be true or false	group musí být true nebo false
+@msg	panel floats; collapse its group with window.panel.float {panel, collapsed}	panel je plovoucí; jeho skupinu sbalíte pomocí window.panel.float {panel, collapsed}
+@msg	panel is not in a dock group	panel není ve skupině doku
+@msg	only a dock group above or below others collapses, not one beside another	sbalit lze jen skupinu doku nad nebo pod jinými, ne vedle jiné
+@msg	icon must be true or false	icon musí být true nebo false
+@msg	icon only docks a panel in the icon column, with no anchor	icon jen ukotví panel ve sloupci ikon, bez anchor
+@msg	column docks a set as a dock column, with no anchor or icon	column ukotví sadu jako sloupec doku, bez anchor nebo icon
 @msg	move requires a destination panel	přesun vyžaduje cílový panel
 @msg	move requires an existing destination panel	přesun vyžaduje existující cílový panel
 @msg	onto must name a floating panel	onto musí určovat plovoucí panel
@@ -5272,6 +5285,8 @@ mark-style	Japanese	Japonské
 	Sketch	Skica
 	Halftone Pattern…	Polotónový vzorek…
 	Halftone Pattern	Polotónový vzorek
+	Torn Edges…	Roztržené okraje…
+	Torn Edges	Roztržené okraje
 	Pattern Type	Typ vzorku
 	Dot	Tečka
 # User Interface › Color Scheme
@@ -5323,9 +5338,11 @@ mark-style	Japanese	Japonské
 @msg	Persistent libraries not found: {files}	Trvalé knihovny nebyly nalezeny: {files}
 @msg	`{given}` isn't a library panel (see window.swatchLibrary)	`{given}` není panel knihovny (viz window.swatchLibrary)
 @msg	library panel `{given}` isn't open	panel knihovny `{given}` není otevřený
+@msg	library panel `{given}` isn't missing its library	knihovna panelu knihovny `{given}` nechybí
 @msg	too many library panels were opened in this session	v této relaci bylo otevřeno příliš mnoho panelů knihoven
 @msg	The image is {_1} × {_2} pixels, more than {LARGE_TRACE_SIDE} on a side: it is traced, but more slowly. A lower-fidelity preset or a smaller copy of the image traces faster.	Obraz má {_1} × {_2} pixelů, na jedné straně více než {LARGE_TRACE_SIDE}: vektorizuje se, ale pomaleji. Rychleji se vektorizuje s předvolbou nižší věrnosti nebo menší kopie obrazu.
 @msg	The image was traced at {_1} × {_2} pixels, scaled down from {_3} × {_4} ({_5} megapixels at most).	Obraz byl vektorizován v rozlišení {_1} × {_2} pixelů, zmenšený z {_3} × {_4} (nejvýše {_5} megapixelů).
+	Gap Length:	Délka mezery:
 	Artboard {n} of {total}	Pracovní plocha {n} z {total}
 	Encoding and writing the file…	Kódování a zápis souboru…
 @plural	{n} more export waiting|{n} more exports waiting	Čeká ještě {n} export|Čekají ještě {n} exporty|Čeká ještě {n} exportů
@@ -5342,6 +5359,14 @@ mark-style	Japanese	Japonské
 	Full Justify	Zarovnat do bloku
 	Minimum must not exceed Desired, nor Desired Maximum.	Minimum nesmí překročit požadovanou hodnotu ani požadovaná hodnota maximum.
 	Justification	Zarovnání do bloku
+	Add filters from the list above	Přidejte filtry ze seznamu výše
+	Add to Stack	Přidat na zásobník
+	Applied Filters	Použité filtry
+	Categories	Kategorie
+	Choose a filter	Vyberte filtr
+	Effect Gallery	Galerie efektů
+	Filters	Filtry
+	Select artwork to apply effects	Vyberte grafiku, na kterou chcete použít efekty
 @msg	the file's variables and data sets weren't read (variables: {variables}, data sets: {data_sets}): the Variables panel doesn't list them	proměnné a sady dat souboru nebyly načteny (proměnné: {variables}, sady dat: {data_sets}): panel Proměnné je nezobrazuje
 # Select by Color (select.color)
 	Select by Color	Vybrat podle barvy
@@ -5367,3 +5392,13 @@ mark-style	Japanese	Japonské
 	Water Paper	Mokrý papír
 	Ruby…	Ruby…
 	Ruby	Ruby
+	Ease In	Pozvolný začátek
+	Ease Out	Pozvolný konec
+	Ease In Out	Pozvolný začátek a konec
+	Ease Out In	Pozvolný konec a začátek
+	Ramp:	Síla:
+	Shift:	Posun:
+	Fresco…	Freska…
+	Fresco	Freska
+	Effect Gallery…	Galerie efektů…
+	Effect Gallery Dialog	Dialog Galerie efektů

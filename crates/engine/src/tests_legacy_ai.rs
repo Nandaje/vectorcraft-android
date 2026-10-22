@@ -3,7 +3,7 @@
 
 use serde_json::{Value, json};
 
-use super::tests_menucmds::place_undecodable_png;
+use super::tests_menucmds::{place_undecodable_png, place_undecodable_png_sized};
 use super::*;
 use crate::tests_links::Folder;
 
@@ -360,6 +360,29 @@ fn a_flattened_image_that_cant_be_decoded_is_noted_once() {
     assert_eq!(r["files"].as_array().map(Vec::len), Some(2), "{r}");
     assert!(warnings(&r).iter().any(|w| w.contains("flattened with the art under them")), "{r}");
     assert_eq!(undecoded_notes(&r), 1, "{r}");
+}
+
+/// Images that can't be decoded and are written as they are get the same note as one that is
+/// flattened. All of them give one note, and the note names no image's key.
+#[test]
+fn images_written_or_flattened_that_cant_be_decoded_are_noted_once() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 200, "height": 100})).unwrap();
+    place_undecodable_png(&mut s);
+    place_undecodable_png_sized(&mut s, 48, 24);
+    let keys: Vec<String> = s.doc().unwrap().doc.images.keys().cloned().collect();
+    assert_eq!(keys.len(), 2);
+    let decode_notes = |r: &Value| warnings(r).iter().filter(|w| w.contains("decoded")).count();
+    let named = |r: &Value| warnings(r).iter().any(|w| keys.iter().any(|k| w.contains(k.as_str())));
+    let r = s.execute("file.saveCopy", &json!({"format": "ai", "aiVersion": "7"})).unwrap();
+    assert_eq!((undecoded_notes(&r), decode_notes(&r), named(&r)), (1, 1, false), "{r}");
+    // A third image, at 50% opacity, is flattened. The engine's note and the writer's note come out
+    // as one warning.
+    let cut = place_undecodable_png_sized(&mut s, 32, 16);
+    s.execute("transparency.set", &json!({"ids": [cut.0], "opacity": 50})).unwrap();
+    let r = s.execute("file.saveCopy", &json!({"format": "ai", "aiVersion": "7"})).unwrap();
+    assert!(warnings(&r).iter().any(|w| w.contains("flattened with the art under them")), "{r}");
+    assert_eq!((undecoded_notes(&r), decode_notes(&r), named(&r)), (1, 1, false), "{r}");
 }
 
 #[test]

@@ -38,6 +38,11 @@
 	Medium Light	Średnio jasny
 	Light	Jasny
 	Quit VectorCraft	Zakończ VectorCraft
+# Artwork drag between document tabs.
+	Drop Artwork	Upuść kompozycję
+@msg	{key} must be [x, y] with finite coordinates	{key} musi mieć postać [x, y] ze skończonymi współrzędnymi
+@msg	ids must contain 1–10000 object ids	ids musi zawierać od 1 do 10000 identyfikatorów obiektów
+
 	File	Plik
 	New…	Nowy…
 	New Without Dialog	Nowy bez okna dialogowego
@@ -770,6 +775,7 @@
 	Activate Panel	Aktywuj panel
 	Change Panel Layout	Zmień układ paneli
 	Close Panel	Zamknij panel
+	Collapse Panel Group	Zwiń grupę paneli
 	Move Panel	Przesuń panel
 	Group with	Grupuj z
 	Resize panels	Zmień rozmiar paneli
@@ -1307,6 +1313,7 @@ lighting	Light	Światło
 	Leading	Interlinia
 	No Break	Bez podziału
 	Proportional Metrics	Metryka proporcjonalna
+	Character Direction	Kierunek znaków
 	Digits	Cyfry
 	Arabic	Arabskie
 	Hindi	Hindi
@@ -4112,7 +4119,7 @@ imageTrace	Outline	Kontur
 @msg	give the path `id` and the width point `index`	podaj `id` ścieżki i `index` punktu szerokości
 @msg	guides are locked	linie pomocnicze są zablokowane
 @msg	handle must be in or out	handle musi mieć wartość in lub out
-@msg	image '{key}' has no pixels and was left out	obraz '{key}' nie ma pikseli i został pominięty
+@msg	an image has no pixels and was left out	pominięto obraz bez pikseli
 @msg	image data `{_1}` is missing	brak danych obrazu `{_1}`
 @msg	image would be too large; lower the resolution	obraz byłby zbyt duży; zmniejsz rozdzielczość
 @msg	index must be a number or first, previous, next or last	indeks musi być liczbą lub first, previous, next albo last
@@ -4577,6 +4584,12 @@ imageTrace	Outline	Kontur
 @msg	before must name a panel	before musi wskazywać panel
 @msg	docking action contains an unknown panel or an excessive split path	operacja dokowania zawiera nieznany panel lub zbyt długą ścieżkę podziału
 @msg	group must be true or false	group musi mieć wartość true lub false
+@msg	icon must be true or false	icon musi mieć wartość true lub false
+@msg	icon only docks a panel in the icon column, with no anchor	icon tylko dokuje panel w kolumnie ikon, bez anchor
+@msg	column docks a set as a dock column, with no anchor or icon	column dokuje zestaw jako kolumnę doku, bez anchor ani icon
+@msg	panel floats; collapse its group with window.panel.float {panel, collapsed}	panel jest pływający; zwiń jego grupę za pomocą window.panel.float {panel, collapsed}
+@msg	panel is not in a dock group	panel nie należy do żadnej grupy doku
+@msg	only a dock group above or below others collapses, not one beside another	zwinąć można tylko grupę doku nad lub pod innymi, a nie obok innej
 @msg	move requires a destination panel	przeniesienie wymaga panelu docelowego
 @msg	move requires an existing destination panel	przeniesienie wymaga istniejącego panelu docelowego
 @msg	onto must name a floating panel	onto musi wskazywać panel pływający
@@ -5124,6 +5137,8 @@ mark-style	Japanese	Japońskie
 	Sketch	Szkic
 	Halftone Pattern…	Wzór rastra…
 	Halftone Pattern	Wzór rastra
+	Torn Edges…	Postrzępione krawędzie…
+	Torn Edges	Postrzępione krawędzie
 	Pattern Type	Typ wzoru
 	Dot	Kropka
 # User Interface › Color Scheme
@@ -5175,9 +5190,11 @@ mark-style	Japanese	Japońskie
 @msg	Persistent libraries not found: {files}	Nie znaleziono trwałych bibliotek: {files}
 @msg	`{given}` isn't a library panel (see window.swatchLibrary)	`{given}` nie jest panelem biblioteki (zobacz window.swatchLibrary)
 @msg	library panel `{given}` isn't open	panel biblioteki `{given}` nie jest otwarty
+@msg	library panel `{given}` isn't missing its library	panelowi biblioteki `{given}` nie brakuje biblioteki
 @msg	too many library panels were opened in this session	w tej sesji otwarto zbyt wiele paneli bibliotek
 @msg	The image is {_1} × {_2} pixels, more than {LARGE_TRACE_SIDE} on a side: it is traced, but more slowly. A lower-fidelity preset or a smaller copy of the image traces faster.	Obraz ma {_1} × {_2} pikseli, ponad {LARGE_TRACE_SIDE} na jednym boku: zostanie obrysowany, ale wolniej. Ustawienie wstępne o niższej wierności lub mniejsza kopia obrazu obrysuje się szybciej.
 @msg	The image was traced at {_1} × {_2} pixels, scaled down from {_3} × {_4} ({_5} megapixels at most).	Obraz obrysowano w rozdzielczości {_1} × {_2} pikseli, po zmniejszeniu z {_3} × {_4} (najwyżej {_5} megapikseli).
+	Gap Length:	Długość przerwy:
 	Artboard {n} of {total}	Obszar kompozycji {n} z {total}
 	Encoding and writing the file…	Kodowanie i zapisywanie pliku…
 @plural	{n} more export waiting|{n} more exports waiting	Czeka jeszcze {n} eksport|Czekają jeszcze {n} eksporty|Czeka jeszcze {n} eksportów
@@ -5194,6 +5211,14 @@ mark-style	Japanese	Japońskie
 	Full Justify	Pełne justowanie
 	Minimum must not exceed Desired, nor Desired Maximum.	Minimum nie może przekraczać wartości optymalnej, a wartość optymalna maksimum.
 	Justification	Justowanie
+	Add filters from the list above	Dodaj filtry z listy powyżej
+	Add to Stack	Dodaj do stosu
+	Applied Filters	Zastosowane filtry
+	Categories	Kategorie
+	Choose a filter	Wybierz filtr
+	Effect Gallery	Galeria efektów
+	Filters	Filtry
+	Select artwork to apply effects	Wybierz grafikę, aby zastosować efekty
 @msg	the file's variables and data sets weren't read (variables: {variables}, data sets: {data_sets}): the Variables panel doesn't list them	zmienne i zestawy danych pliku nie zostały wczytane (zmienne: {variables}, zestawy danych: {data_sets}): panel Zmienne ich nie wyświetla
 # Select by Color (select.color)
 	Select by Color	Zaznacz według koloru
@@ -5219,3 +5244,13 @@ mark-style	Japanese	Japońskie
 	Water Paper	Mokry papier
 	Ruby…	Ruby…
 	Ruby	Ruby
+	Ease In	Łagodny początek
+	Ease Out	Łagodny koniec
+	Ease In Out	Łagodny początek i koniec
+	Ease Out In	Łagodny koniec i początek
+	Ramp:	Siła:
+	Shift:	Przesunięcie:
+	Fresco…	Fresk…
+	Fresco	Fresk
+	Effect Gallery…	Galeria efektów…
+	Effect Gallery Dialog	Okno dialogowe Galeria efektów

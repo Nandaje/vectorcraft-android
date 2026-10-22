@@ -1010,6 +1010,11 @@
 	Fidelity:	精确度：
 	Figure Space	数字空格
 	Figure:	数字：
+# Artwork drag between document tabs.
+	Drop Artwork	放置图稿
+@msg	{key} must be [x, y] with finite coordinates	{key} 必须是具有有限坐标的 [x, y]
+@msg	ids must contain 1–10000 object ids	ids 必须包含 1–10000 个对象 ID
+
 	File	文件
 	File Dimensions	文件尺寸
 	File Format:	文件格式：
@@ -2298,6 +2303,7 @@ font-script	Japanese	汉字
 	Proof Setup	校样设置
 	Properties	属性
 	Proportional Metrics	比例度量
+	Character Direction	字符方向
 	Digits	数字
 	Arabic	阿拉伯数字
 	Hindi	印地数字
@@ -3623,7 +3629,7 @@ imageTrace	Outline	轮廓
 @msg	the scale is not a usable number	比例不是可用的数字
 @msg	the drawing is too large to open	图纸过大，无法打开
 @msg	scale must be a number from {_1} to {_2}, not {_3}	比例必须是 {_1} 到 {_2} 之间的数字，而不是 {_3}
-@msg	image '{key}' has no pixels and was left out	图像 '{key}' 没有像素，已略去
+@msg	an image has no pixels and was left out	已略去没有像素的图像
 @msg	Embedded {n} image(s)	已嵌入 {n} 张图像
 @msg	object {0} cannot have children	对象 {0} 不能包含子对象
 @msg	range `{s}` is empty	范围 `{s}` 为空
@@ -4274,6 +4280,12 @@ imageTrace	Outline	轮廓
 @msg	before must name a panel	before 必须指定面板
 @msg	docking action contains an unknown panel or an excessive split path	停靠操作包含未知面板或过长的拆分路径
 @msg	group must be true or false	group 必须是 true 或 false
+@msg	panel floats; collapse its group with window.panel.float {panel, collapsed}	面板处于浮动状态；请使用 window.panel.float {panel, collapsed} 折叠其面板组
+@msg	panel is not in a dock group	面板不在停放组中
+@msg	only a dock group above or below others collapses, not one beside another	只有位于其他组上方或下方的停放组可以折叠，并排的不行
+@msg	icon must be true or false	icon 必须为 true 或 false
+@msg	icon only docks a panel in the icon column, with no anchor	icon 只会把面板停放到图标栏中，不能带 anchor
+@msg	column docks a set as a dock column, with no anchor or icon	column 将一组面板停放为停放栏，不能带 anchor 或 icon
 @msg	move requires a destination panel	移动需要目标面板
 @msg	move requires an existing destination panel	移动需要现有的目标面板
 @msg	onto must name a floating panel	onto 必须指定浮动面板
@@ -4883,6 +4895,7 @@ effect	Vertical	垂直
 	Activate Panel	激活面板
 	Change Panel Layout	更改面板布局
 	Close Panel	关闭面板
+	Collapse Panel Group	折叠面板组
 	Move Panel	移动面板
 	Group with	组合到
 	Resize panels	调整面板大小
@@ -5107,6 +5120,8 @@ lighting	Light	光源
 	Sketch	素描
 	Halftone Pattern…	半调图案…
 	Halftone Pattern	半调图案
+	Torn Edges…	撕边…
+	Torn Edges	撕边
 	Pattern Type	图案类型
 	Dot	网点
 # User Interface › Color Scheme
@@ -5156,9 +5171,11 @@ lighting	Light	光源
 @msg	Persistent libraries not found: {files}	找不到持久库：{files}
 @msg	`{given}` isn't a library panel (see window.swatchLibrary)	`{given}` 不是库面板 (请参阅 window.swatchLibrary)
 @msg	library panel `{given}` isn't open	库面板 `{given}` 未打开
+@msg	library panel `{given}` isn't missing its library	库面板 `{given}` 的库未缺失
 @msg	too many library panels were opened in this session	本次会话中打开的库面板过多
 @msg	The image is {_1} × {_2} pixels, more than {LARGE_TRACE_SIDE} on a side: it is traced, but more slowly. A lower-fidelity preset or a smaller copy of the image traces faster.	图像为 {_1} × {_2} 像素，某一边超过 {LARGE_TRACE_SIDE}：会进行描摹，但速度较慢。使用保真度较低的预设或图像的较小副本会更快。
 @msg	The image was traced at {_1} × {_2} pixels, scaled down from {_3} × {_4} ({_5} megapixels at most).	图像已按 {_1} × {_2} 像素描摹，由 {_3} × {_4} 缩小而来（最多 {_5} 百万像素）。
+	Gap Length:	间隙长度：
 # Links and Attributes: files and URLs handed to other apps.
 @msg	Edit Original opens image and document files only; “{name}” is not one	编辑原稿只能打开图像和文档文件；“{name}” 不是其中之一
 @msg	only http, https and mailto URLs open in the browser, not “{url}”	浏览器中只会打开 http、https 和 mailto 的 URL，不会打开 “{url}”
@@ -5181,6 +5198,14 @@ lighting	Light	光源
 	Minimum must not exceed Desired, nor Desired Maximum.	最小值不能超过所需值，所需值不能超过最大值。
 	Minimum	最小值
 	Justification	对齐设置
+	Add filters from the list above	从上方列表添加滤镜
+	Add to Stack	添加到堆栈
+	Applied Filters	已应用的滤镜
+	Categories	类别
+	Choose a filter	选择滤镜
+	Effect Gallery	效果库
+	Filters	滤镜
+	Select artwork to apply effects	选择要应用效果的图稿
 @msg	the file's variables and data sets weren't read (variables: {variables}, data sets: {data_sets}): the Variables panel doesn't list them	文件的变量和数据集未被读取（变量：{variables}，数据集：{data_sets}）：“变量”面板不会列出它们
 # Select by Color (select.color)
 	Select by Color	按颜色选择
@@ -5206,3 +5231,13 @@ lighting	Light	光源
 	Water Paper	水彩画纸
 	Ruby…	注音…
 	Ruby	注音
+	Ease In	缓入
+	Ease Out	缓出
+	Ease In Out	缓入缓出
+	Ease Out In	缓出缓入
+	Ramp:	强度：
+	Shift:	偏移：
+	Fresco…	壁画…
+	Fresco	壁画
+	Effect Gallery…	效果库…
+	Effect Gallery Dialog	效果库对话框

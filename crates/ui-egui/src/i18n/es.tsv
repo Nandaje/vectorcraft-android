@@ -1069,6 +1069,11 @@
 	Fidelity:	Fidelidad:
 	Figure Space	Espacio de cifra
 	Figure:	Cifras:
+# Artwork drag between document tabs.
+	Drop Artwork	Soltar ilustración
+@msg	{key} must be [x, y] with finite coordinates	{key} debe ser [x, y] con coordenadas finitas
+@msg	ids must contain 1–10000 object ids	ids debe contener entre 1 y 10000 identificadores de objetos
+
 	File	Archivo
 	File Dimensions	Dimensiones del archivo
 	File Format:	Formato de archivo:
@@ -2394,6 +2399,7 @@
 	Proof Setup	Ajuste de prueba
 	Properties	Propiedades
 	Proportional Metrics	Métrica proporcional
+	Character Direction	Dirección de caracteres
 	Digits	Dígitos
 	Arabic	Árabes
 	Hindi	Hindi
@@ -3988,7 +3994,7 @@ axis	Both	Ambos
 @msg	give the path `id` and the width point `index`	indica el `id` del trazado y el `index` del punto de anchura
 @msg	guides are locked	las guías están bloqueadas
 @msg	handle must be in or out	handle debe ser in u out
-@msg	image '{key}' has no pixels and was left out	la imagen '{key}' no tiene píxeles y se omitió
+@msg	an image has no pixels and was left out	se omitió una imagen sin píxeles
 @msg	image data `{_1}` is missing	faltan los datos de imagen `{_1}`
 @msg	image would be too large; lower the resolution	la imagen sería demasiado grande; baja la resolución
 @msg	index must be a number or first, previous, next or last	index debe ser un número o first, previous, next o last
@@ -4557,6 +4563,7 @@ axis	Both	Ambos
 	Activate Panel	Activar panel
 	Change Panel Layout	Cambiar distribución de paneles
 	Close Panel	Cerrar panel
+	Collapse Panel Group	Contraer grupo de paneles
 	Move Panel	Mover panel
 	Group with	Agrupar con
 	Resize panels	Cambiar tamaño de los paneles
@@ -4567,6 +4574,12 @@ axis	Both	Ambos
 @msg	before must name a panel	before debe indicar un panel
 @msg	docking action contains an unknown panel or an excessive split path	La acción de anclaje contiene un panel desconocido o una ruta de divisiones demasiado larga
 @msg	group must be true or false	group debe ser true o false
+@msg	panel floats; collapse its group with window.panel.float {panel, collapsed}	el panel flota; contraiga su grupo con window.panel.float {panel, collapsed}
+@msg	panel is not in a dock group	el panel no está en un grupo del acoplamiento
+@msg	only a dock group above or below others collapses, not one beside another	solo se contrae un grupo del acoplamiento situado encima o debajo de otros, no al lado
+@msg	icon must be true or false	icon debe ser true o false
+@msg	icon only docks a panel in the icon column, with no anchor	icon solo acopla un panel en la columna de iconos, sin anchor
+@msg	column docks a set as a dock column, with no anchor or icon	column acopla un conjunto como columna del acoplamiento, sin anchor ni icon
 @msg	move requires a destination panel	Para mover se requiere un panel de destino
 @msg	move requires an existing destination panel	Para mover se requiere un panel de destino existente
 @msg	onto must name a floating panel	onto debe indicar un panel flotante
@@ -5214,6 +5227,8 @@ mark-style	Japanese	Japonesas
 	Sketch	Bosquejar
 	Halftone Pattern…	Trama de semitonos…
 	Halftone Pattern	Trama de semitonos
+	Torn Edges…	Bordes desgarrados…
+	Torn Edges	Bordes desgarrados
 	Pattern Type	Tipo de trama
 	Dot	Punto
 # User Interface › Color Scheme
@@ -5265,9 +5280,11 @@ mark-style	Japanese	Japonesas
 @msg	Persistent libraries not found: {files}	No se encontraron bibliotecas persistentes: {files}
 @msg	`{given}` isn't a library panel (see window.swatchLibrary)	`{given}` no es un panel de biblioteca (consulte window.swatchLibrary)
 @msg	library panel `{given}` isn't open	el panel de biblioteca `{given}` no está abierto
+@msg	library panel `{given}` isn't missing its library	la biblioteca del panel de biblioteca `{given}` no falta
 @msg	too many library panels were opened in this session	se abrieron demasiados paneles de biblioteca en esta sesión
 @msg	The image is {_1} × {_2} pixels, more than {LARGE_TRACE_SIDE} on a side: it is traced, but more slowly. A lower-fidelity preset or a smaller copy of the image traces faster.	La imagen tiene {_1} × {_2} píxeles, más de {LARGE_TRACE_SIDE} en un lado: se calcará, pero más despacio. Un ajuste preestablecido de menor fidelidad o una copia más pequeña de la imagen se calcan más rápido.
 @msg	The image was traced at {_1} × {_2} pixels, scaled down from {_3} × {_4} ({_5} megapixels at most).	La imagen se calcó a {_1} × {_2} píxeles, reducida desde {_3} × {_4} ({_5} megapíxeles como máximo).
+	Gap Length:	Longitud del hueco:
 	Artboard {n} of {total}	Mesa de trabajo {n} de {total}
 	Encoding and writing the file…	Codificando y escribiendo el archivo…
 @plural	{n} more export waiting|{n} more exports waiting	{n} exportación más en espera|{n} exportaciones más en espera
@@ -5284,6 +5301,14 @@ mark-style	Japanese	Japonesas
 	Full Justify	Justificar completamente
 	Minimum must not exceed Desired, nor Desired Maximum.	El mínimo no puede superar el deseado, ni el deseado el máximo.
 	Justification	Justificación
+	Add filters from the list above	Añada filtros de la lista de arriba
+	Add to Stack	Añadir a la pila
+	Applied Filters	Filtros aplicados
+	Categories	Categorías
+	Choose a filter	Elija un filtro
+	Effect Gallery	Galería de efectos
+	Filters	Filtros
+	Select artwork to apply effects	Seleccione gráficos para aplicar efectos
 @msg	the file's variables and data sets weren't read (variables: {variables}, data sets: {data_sets}): the Variables panel doesn't list them	no se leyeron las variables ni los conjuntos de datos del archivo (variables: {variables}, conjuntos de datos: {data_sets}): el panel Variables no los muestra
 # Select by Color (select.color)
 	Select by Color	Seleccionar por color
@@ -5309,3 +5334,13 @@ mark-style	Japanese	Japonesas
 	Water Paper	Papel mojado
 	Ruby…	Ruby…
 	Ruby	Ruby
+	Ease In	Entrada suave
+	Ease Out	Salida suave
+	Ease In Out	Entrada y salida suaves
+	Ease Out In	Salida y entrada suaves
+	Ramp:	Intensidad:
+	Shift:	Desplazamiento:
+	Fresco…	Fresco…
+	Fresco	Fresco
+	Effect Gallery…	Galería de efectos…
+	Effect Gallery Dialog	Cuadro de diálogo Galería de efectos
