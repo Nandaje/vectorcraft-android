@@ -87,7 +87,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Nudge",
             [],
             None,
-            "{dx: -1|0|1, dy: -1|0|1, big?: bool (×10), copy?: bool, patterns?: bool (Transform Patterns: pattern fills and strokes transform with the objects that move whole; default: prefs transformPatternTiles), typeAreas?: bool (area type: the frame is reshaped and the text reflows at its size), objects?: bool (Transform Objects, as object.move)} arrow-key nudge by the keyboard increment (the selected anchors, else objects, else ruler guides)",
+            "{dx: -1|0|1, dy: -1|0|1, big?: bool (×10), copy?: bool, patterns?: bool (Transform Patterns: pattern fills and strokes transform with the objects that move whole; default: prefs transformPatternTiles), typeAreas?: bool (area type: the frame is reshaped and the text reflows at its size), objects?: bool (Transform Objects, as object.move)} arrow-key nudge by the keyboard increment (the selected anchors, else objects, along the x and y axes turned by the constrainAngle preference; else ruler guides, along the page axes)",
             has_selection_or_guides,
             nudge
         ),
@@ -527,13 +527,27 @@ fn move_cmd(s: &mut Session, p: &Value) -> Result<Value> {
     apply_transform(s, "Move", ids, Affine::translate((f64_or(p, "dx", 0.0), f64_or(p, "dy", 0.0))), p, true)
 }
 
+/// The arrow keys' step `(dx, dy)` (page axes, y down) along the x and y axes turned by General ›
+/// Constrain Angle (`deg`, counter-clockwise on the page): with 30°, → moves 30° up from the
+/// horizontal, as the reference app's arrow keys follow the constrain angle (users set it to −90°
+/// to nudge along a view rotated by 90°:
+/// <https://community.adobe.com/t5/illustrator-discussions/arrow-keys-and-ruler-guides-not-adjusted-when-using-rotate-view/m-p/12489564>).
+pub(crate) fn along_constrain_angle(dx: f64, dy: f64, deg: f64) -> (f64, f64) {
+    // Whole turns are the page's axes, exactly; quarter turns are exact too.
+    let Some(axes) = vectorcraft_geom::constrain_axes(deg) else { return (dx, dy) };
+    let v = axes * Point::new(dx, dy);
+    (v.x, v.y)
+}
+
 fn nudge(s: &mut Session, p: &Value) -> Result<Value> {
     check_numbers(p, &["dx", "dy"], "object.nudge")?;
     check_switches(p, &TRANSFORM_SWITCHES, "object.nudge")?;
     check_switches(p, &["big"], "object.nudge")?;
     let k = s.prefs.keyboard_increment * if bool_or(p, "big", false) { 10.0 } else { 1.0 };
-    let dx = f64_or(p, "dx", 0.0) * k;
-    let dy = f64_or(p, "dy", 0.0) * k;
+    let (dx, dy) = (f64_or(p, "dx", 0.0) * k, f64_or(p, "dy", 0.0) * k);
+    // Guides keep to the page's axes; art and anchors move along the constrain angle's.
+    let (gx, gy) = (dx, dy);
+    let (dx, dy) = along_constrain_angle(dx, dy, s.prefs.constrain_angle);
     if !s.doc()?.selection.anchors.is_empty() {
         // When the anchors move by 0, the document and its undo history stay as they are.
         if dx == 0.0 && dy == 0.0 {
@@ -544,10 +558,10 @@ fn nudge(s: &mut Session, p: &Value) -> Result<Value> {
     if s.doc()?.selection.is_empty() {
         let copy = bool_or(p, "copy", false);
         // When guides move by 0 without a copy, the document and its undo history stay as they are.
-        if dx == 0.0 && dy == 0.0 && !copy {
+        if gx == 0.0 && gy == 0.0 && !copy {
             return ok();
         }
-        return super::docmenu::guide_move(s, &json!({ "dx": dx, "dy": dy, "copy": copy }));
+        return super::docmenu::guide_move(s, &json!({ "dx": gx, "dy": gy, "copy": copy }));
     }
     let ids = selected_roots_to_transform(s)?;
     apply_transform(s, "Move", ids, Affine::translate((dx, dy)), p, true)

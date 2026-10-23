@@ -29,7 +29,7 @@ pub fn simplify(path: &PathData, tolerance: f64) -> PathData {
     simplify_with(path, &SimplifyOptions { tolerance, ..Default::default() })
 }
 
-/// The Simplify slider's level for a tolerance of 1 pt, where the slider opens.
+/// The Simplify slider's level for a tolerance of 1 pt, the middle of its scale.
 pub const SIMPLIFY_LEVEL: f64 = 50.0;
 
 /// The tolerance (points) of Simplify slider level `level`, from 0 (the fewest anchor points) to

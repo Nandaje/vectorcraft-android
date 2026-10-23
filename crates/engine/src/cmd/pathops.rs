@@ -635,7 +635,7 @@ pub(crate) fn outlined_stroke(
         blend: st.blend,
         effects: st.effects.clone(),
         overprint: st.overprint,
-        ..vectorcraft_doc::appearance::FillLayer::new(st.paint.clone())
+        ..vectorcraft_doc::appearance::FillLayer::new(st.paint.stroke_as_fill())
     };
     n.appearance = Appearance { items: vec![AppearanceItem::Fill(fill)], ..Default::default() }.into();
     Some(n)
@@ -801,12 +801,19 @@ fn edit_paths(s: &mut Session, label: &str, f: impl Fn(&PathData) -> PathData) -
     Ok((ids, before, after))
 }
 
+/// Auto-Simplify's level for the selection: [`po::auto_simplify_level`] for the longer side of the
+/// selected objects' bounds. Object › Path › Simplify's slider opens at it, and
+/// `object.path.simplify {auto: true}` simplifies at it.
+pub fn auto_simplify_level(s: &Session) -> Result<f64> {
+    let roots = selected_roots(s)?;
+    let size = s.doc()?.doc.bounds_of(&roots, false).map_or(0.0, |b| b.width().max(b.height()));
+    Ok(po::auto_simplify_level(size))
+}
+
 fn simplify(s: &mut Session, p: &Value) -> Result<Value> {
     // With auto, the slider's level is Auto-Simplify's for the selection's size; otherwise it is the level given.
     let level = if bool_or(p, "auto", false) {
-        let roots = selected_roots(s)?;
-        let size = s.doc()?.doc.bounds_of(&roots, false).map_or(0.0, |b| b.width().max(b.height()));
-        Some(po::auto_simplify_level(size))
+        Some(auto_simplify_level(s)?)
     } else {
         num_param(p, "level").map(|l| if l.is_finite() { l.round().clamp(0.0, 100.0) } else { po::SIMPLIFY_LEVEL })
     };

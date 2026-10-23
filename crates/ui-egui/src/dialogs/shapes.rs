@@ -1,7 +1,8 @@
 //! Shape size dialogs (a click with a shape tool): Rectangle, Rounded Rectangle, Ellipse, Polygon,
-//! Star, Line Segment Tool Options and the two grids (size, divider counts and skews, switches).
+//! Star, Line Segment, Arc and Spiral tool options, and the two grids (size, divider counts and skews, switches).
 
 use serde_json::{Value, json};
+use vectorcraft_doc::Unit;
 use vectorcraft_geom::{Point, Rect};
 
 use super::{DialogSpec, form, run_and_close};
@@ -19,8 +20,10 @@ fn title(kind: &str) -> &'static str {
         "ellipse" => tl!("Ellipse"),
         "polygon" => tl!("Polygon"),
         "star" => tl!("Star"),
+        "spiral" => tl!("Spiral"),
         "rectangularGrid" => tl!("Rectangular Grid"),
         "polarGrid" => tl!("Polar Grid"),
+        "arc" => tl!("Arc Segment Tool Options"),
         _ => tl!("Line Segment Tool Options"),
     }
 }
@@ -46,6 +49,21 @@ fn set_grid_placed(d: &mut Dialog, r: Rect) {
     d.fields.insert("y".into(), json!(r.y0));
     d.fields.insert("width".into(), json!(r.width()));
     d.fields.insert("height".into(), json!(r.height()));
+}
+
+/// Arc segment dialog: keep reference `refi` on the canvas click (`__anchorX`/`__anchorY`).
+pub(crate) fn arc_pin_to_anchor(d: &mut Dialog) {
+    let anchor = Point::new(d.f64("__anchorX", d.f64("x", 0.0)), d.f64("__anchorY", d.f64("y", 0.0)));
+    let refi = d.fields.get("reference").and_then(|v| v.as_u64()).map(|n| (n as usize).min(8)).unwrap_or(0);
+    let w = d.f64("lengthX", 100.0).abs().max(1e-9);
+    let h = d.f64("lengthY", 100.0).abs().max(1e-9);
+    let rp = vectorcraft_geom::reference_point(Rect::new(0.0, 0.0, w, h), refi);
+    d.fields.insert("x".into(), json!(anchor.x - rp.x));
+    d.fields.insert("y".into(), json!(anchor.y - rp.y));
+}
+
+fn arc_reference(d: &Dialog) -> usize {
+    d.fields.get("reference").and_then(|v| v.as_u64()).map(|n| (n as usize).min(8)).unwrap_or(0)
 }
 
 /// Top-left `x`/`y` so reference point `refi` sits on the canvas click (`__anchorX`/`__anchorY`).
@@ -78,8 +96,15 @@ fn body(app: &mut VectorcraftApp, ui: &mut egui::Ui, d: &mut Dialog) -> bool {
                 set_grid_placed(d, artboard_rect(was, refi, None, None, Some(w), Some(h), false));
             }
         });
+    } else if d.kind == "arc" {
+        arc_form(ui, d, unit);
     } else {
         form::grid(ui, d, unit);
+    }
+    if d.kind == "spiral" {
+        ui.add_space(8.0);
+        form::check(ui, d, "clockwise", tl!("Clockwise"));
+        return false;
     }
     let own = match d.kind.as_str() {
         "rectangularGrid" => ("frame", tl!("Use Outside Rectangle As Frame")),
@@ -91,6 +116,50 @@ fn body(app: &mut VectorcraftApp, ui: &mut egui::Ui, d: &mut Dialog) -> bool {
         form::check(ui, d, key, label);
     }
     false
+}
+
+fn arc_form(ui: &mut egui::Ui, d: &mut Dialog, unit: Unit) {
+    ui.horizontal(|ui| {
+        let refi = arc_reference(d);
+        if let Some(i) = widgets::reference_point(ui, refi) {
+            d.fields.insert("reference".into(), json!(i));
+            arc_pin_to_anchor(d);
+        }
+    });
+    ui.add_space(4.0);
+    let rail = crate::theme::Tokens::get(ui.ctx()).input_border;
+    egui::Grid::new("arc-dlg").num_columns(2).spacing([10.0, 8.0]).show(ui, |ui| {
+        let lx0 = d.f64("lengthX", 100.0);
+        form::length_field(ui, d, "lengthX", tl!("Length X-Axis:"), unit);
+        if d.f64("lengthX", 100.0) != lx0 {
+            arc_pin_to_anchor(d);
+        }
+        let ly0 = d.f64("lengthY", 100.0);
+        form::length_field(ui, d, "lengthY", tl!("Length Y-Axis:"), unit);
+        if d.f64("lengthY", 100.0) != ly0 {
+            arc_pin_to_anchor(d);
+        }
+        form::choice(ui, d, "arcType", tl!("Type:"), (form::FIELD_W, form::FIELD_W - 12.0), &[("open", tl!("Open")), ("closed", tl!("Closed"))]);
+        form::choice(
+            ui,
+            d,
+            "baseAlong",
+            tl!("Base Along:"),
+            (form::FIELD_W, form::FIELD_W - 12.0),
+            &[
+                ("x", crate::i18n::tr_ctx(crate::i18n::current(), "axis", "X Axis")),
+                ("y", crate::i18n::tr_ctx(crate::i18n::current(), "axis", "Y Axis")),
+            ],
+        );
+        form::row_label(ui, tl!("Slope:"));
+        ui.vertical(|ui| {
+            form::slider_field_named(ui, d, "slope", tl!("Slope:"), -100.0..=100.0, "", &|_| rail);
+            form::slider_ends(ui, form::SLIDER_LABEL, (tl!("Concave"), tl!("Convex")));
+        });
+        ui.end_row();
+    });
+    ui.add_space(8.0);
+    form::check(ui, d, "fillArc", tl!("Fill Arc"));
 }
 
 /// The top-left corner of a rectangle or ellipse: the click itself, or with Alt held (draw from centre) the click minus half the size.
@@ -109,11 +178,25 @@ fn confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
         "star" => Some(("points", 5.0, 2.0)),
         _ => None,
     };
-    let options = count.map(|(key, default, min)| {
-        let mut values = json!({});
-        values[key] = json!(d.f64(key, default).clamp(min, 1000.0) as u64);
-        values
-    });
+    let options = count
+        .map(|(key, default, min)| {
+            let mut values = json!({});
+            values[key] = json!(d.f64(key, default).clamp(min, 1000.0) as u64);
+            values
+        })
+        .or_else(|| {
+            (d.kind == "arc").then(|| {
+                json!({
+                    "closed": d.str("arcType").eq_ignore_ascii_case("closed"),
+                    "lengthX": d.f64("lengthX", 100.0),
+                    "lengthY": d.f64("lengthY", 100.0),
+                    "reference": arc_reference(d),
+                    "baseAlong": d.str("baseAlong"),
+                    "slope": d.f64("slope", 50.0),
+                    "fillArc": d.bool("fillArc"),
+                })
+            })
+        });
     let (x, y) = (d.f64("x", 0.0), d.f64("y", 0.0));
     let (bx, by) = box_origin(d);
     let (id, params) = match d.kind.as_str() {
@@ -122,6 +205,17 @@ fn confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
         "star" => (
             "shape.star",
             json!({"cx": x, "cy": y, "radius1": d.f64("radius1", 50.0), "radius2": d.f64("radius2", 25.0), "points": d.f64("points", 5.0) as u64}),
+        ),
+        "spiral" => (
+            "shape.spiral",
+            json!({
+                "cx": x,
+                "cy": y,
+                "radius": d.f64("radius", 50.0).max(0.01),
+                "decay": d.f64("decay", 80.0).clamp(5.0, 150.0),
+                "segments": (d.f64("segments", 10.0) as u64).clamp(2, 1000),
+                "clockwise": d.bool("clockwise"),
+            }),
         ),
         kind @ ("rectangularGrid" | "polarGrid") => {
             // The switches as they are; the typed fields as numbers.
@@ -140,16 +234,43 @@ fn confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
             let (l, a) = (d.f64("length", 100.0), d.f64("angle", 0.0).to_radians());
             ("shape.line", json!({"x1": x, "y1": y, "x2": x + l * a.cos(), "y2": y - l * a.sin()}))
         }
+        "arc" => {
+            let anchor = Point::new(d.f64("__anchorX", x), d.f64("__anchorY", y));
+            (
+                "shape.arc",
+                json!({
+                    "x": anchor.x,
+                    "y": anchor.y,
+                    "lengthX": d.f64("lengthX", 100.0),
+                    "lengthY": d.f64("lengthY", 100.0),
+                    "reference": arc_reference(d),
+                    "baseAlong": d.str("baseAlong"),
+                    "slope": d.f64("slope", 50.0),
+                    "closed": d.str("arcType").eq_ignore_ascii_case("closed"),
+                    "fillArc": d.bool("fillArc"),
+                }),
+            )
+        }
         _ => (
             "shape.rectangle",
             json!({"x": bx, "y": by, "width": d.f64("width", 100.0), "height": d.f64("height", 100.0), "radius": d.f64("radius", 0.0)}),
         ),
     };
-    // On the active plane while the perspective grid shows, sized in plane units from the click.
-    let options = options.or_else(|| matches!(d.kind.as_str(), "rectangularGrid" | "polarGrid").then(|| params.clone()));
+    // On the active plane while the perspective grid shows, sized in plane units from the click;
+    // else along General › Constrain Angle, turned about the point the dialog places at the click
+    // (a grid's reference point, the other shapes' top-left corner or centre).
+    let options = options.or_else(|| matches!(d.kind.as_str(), "spiral" | "rectangularGrid" | "polarGrid").then(|| params.clone()));
     let result = match vectorcraft_engine::perspective_click(&app.session, id, &params, vectorcraft_geom::Point::new(x, y)) {
         Some((id, params)) => run_and_close(app, &id, params),
-        None => run_and_close(app, id, params),
+        None => {
+            let pivot = if matches!(d.kind.as_str(), "rectangularGrid" | "polarGrid") {
+                vectorcraft_geom::reference_point(grid_placed(d), grid_reference(d))
+            } else {
+                vectorcraft_geom::Point::new(x, y)
+            };
+            let params = vectorcraft_engine::constrain_click(&app.session, id, params, pivot);
+            run_and_close(app, id, params)
+        }
     }?;
     if let Some(options) = options {
         app.run("tool.setOption", json!({"tool": d.kind, "values": options}))?;
@@ -160,6 +281,32 @@ fn confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use vectorcraft_engine::Session;
+
+    #[test]
+    fn spiral_click_dialog_uses_and_updates_tool_options() {
+        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        app.run("file.new", json!({"width": 300, "height": 200})).unwrap();
+        app.run("tool.select", json!({"tool": "spiral"})).unwrap();
+        app.run("tool.setOption", json!({"tool": "spiral", "values": {"decay": 72.0, "segments": 14, "clockwise": false}})).unwrap();
+
+        super::super::open_tool_dialog(&mut app, "spiral", json!({"x": 40.0, "y": 60.0}));
+        let d = app.ui.dialog.as_ref().expect("Spiral dialog");
+        assert_eq!(d.kind, "spiral");
+        assert_eq!((d.f64("x", 0.0), d.f64("y", 0.0), d.f64("radius", 0.0)), (40.0, 60.0, 50.0));
+        assert_eq!((d.f64("decay", 0.0), d.f64("segments", 0.0), d.bool("clockwise")), (72.0, 14.0, false));
+
+        let d = app.ui.dialog.as_mut().unwrap();
+        d.fields.insert("radius".into(), json!(35.0));
+        d.fields.insert("decay".into(), json!(65.0));
+        d.fields.insert("segments".into(), json!(12));
+        d.fields.insert("clockwise".into(), json!(true));
+        super::super::confirm(&mut app).unwrap();
+
+        assert!(app.ui.dialog.is_none());
+        assert_eq!(app.session.doc().unwrap().doc.layers[0].children().unwrap().len(), 1);
+        assert_eq!(app.session.tool_options_of("spiral"), json!({"decay": 65.0, "segments": 12, "clockwise": true}));
+    }
 
     #[test]
     fn alt_click_centres_the_typed_size_on_the_click() {

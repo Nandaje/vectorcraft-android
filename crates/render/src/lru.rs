@@ -43,6 +43,9 @@ pub(crate) const MESH_BUDGET: usize = 32 << 20;
 pub(crate) const PATTERN_BUDGET: usize = 128 << 20;
 /// Freeform gradient grids, per thread (`freeform::set_freeform_paint`).
 pub(crate) const FREEFORM_BUDGET: usize = 32 << 20;
+/// Dithered gradient grids, per thread (`dither::set_dithered_paint`): a grid is at most 4096²
+/// pixels, 64 MiB.
+pub(crate) const DITHER_BUDGET: usize = 64 << 20;
 
 /// Frames an entry may go unused before [`FrameCache::sweep`] drops it.
 const AGE: u64 = 3;

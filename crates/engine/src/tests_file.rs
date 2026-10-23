@@ -148,6 +148,154 @@ fn double_clicking_outside_the_draw_inside_object_returns_to_draw_normal() {
     assert_eq!(double(&mut s, 150.0, 150.0), (DrawMode::Normal, None));
 }
 
+/// #3705: in Draw Inside, Paste, Paste in Place and Paste on All Artboards put the copies inside
+/// the object drawn into, as drawn art goes, each paste one undo step; the first one makes the
+/// clip group and the next ones add to it, with Paste Remembers Layers on and with the object
+/// isolated by a double-click too. Paste in Front and Paste in Back keep their places.
+/// Draw Inside a compound path: the clip group's mask is a copy whose subpaths have ids of their
+/// own, so no two objects share an id. An artboard copied without art, pasted on all artboards in
+/// Draw Inside, makes no clip group.
+#[test]
+fn draw_inside_a_compound_path_gives_its_mask_ids_of_its_own() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 400, "height": 300, "artboards": 2})).unwrap();
+    let a = s.execute("shape.rectangle", &json!({"x": 100, "y": 100, "width": 100, "height": 100})).unwrap()["id"].as_u64().unwrap();
+    let b = s.execute("shape.rectangle", &json!({"x": 130, "y": 130, "width": 40, "height": 40})).unwrap()["id"].as_u64().unwrap();
+    s.execute("select.set", &json!({"ids": [a, b]})).unwrap();
+    let c = s.execute("object.compoundPath.make", &json!({})).unwrap()["id"].as_u64().unwrap();
+    s.execute("select.set", &json!({"ids": [c]})).unwrap();
+    s.execute("view.drawMode", &json!({"mode": "inside"})).unwrap();
+    s.execute("shape.ellipse", &json!({"x": 120, "y": 120, "width": 30, "height": 30})).unwrap();
+    let d = &s.doc().unwrap().doc;
+    let mut ids = Vec::new();
+    d.walk(|n| ids.push(n.id.0));
+    let all = ids.len();
+    ids.sort_unstable();
+    ids.dedup();
+    assert_eq!(ids.len(), all, "an id is used twice");
+    assert_eq!(d.node(d.parent_of(NodeId(c)).unwrap()).unwrap().kind_label(), "Clip Group");
+    // An artboard alone on the clipboard: Paste on All Artboards adds nothing inside the object.
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 400, "height": 300, "artboards": 2})).unwrap();
+    let a = s.execute("shape.rectangle", &json!({"x": 100, "y": 100, "width": 100, "height": 100})).unwrap()["id"].as_u64().unwrap();
+    s.execute("artboard.copy", &json!({"index": 1, "art": false})).unwrap();
+    s.execute("select.set", &json!({"ids": [a]})).unwrap();
+    s.execute("view.drawMode", &json!({"mode": "inside"})).unwrap();
+    let _ = s.execute("edit.pasteOnAllArtboards", &json!({}));
+    let d = &s.doc().unwrap().doc;
+    assert!(d.parent_of(NodeId(a)).and_then(|p| d.node(p)).is_some_and(|p| p.is_layer()), "no clip group around the object");
+}
+
+#[test]
+fn pasting_in_draw_inside_puts_the_copies_inside_the_object() {
+    let mut s = Session::new();
+    s.execute("file.new", &json!({"width": 400, "height": 300, "artboards": 2})).unwrap();
+    let a = s.execute("shape.rectangle", &json!({"x": 100, "y": 100, "width": 100, "height": 100})).unwrap()["id"].as_u64().unwrap();
+    s.execute("shape.ellipse", &json!({"x": 20, "y": 20, "width": 50, "height": 50})).unwrap();
+    s.execute("edit.copy", &json!({})).unwrap();
+    s.execute("select.set", &json!({"ids": [a]})).unwrap();
+    s.execute("view.drawMode", &json!({"mode": "inside"})).unwrap();
+    let parent = |s: &Session, id: u64| s.doc().unwrap().doc.parent_of(NodeId(id));
+    let pasted = |r: Value| r["ids"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap()).collect::<Vec<_>>();
+    let before = s.doc().unwrap().doc.clone();
+    let undo = s.doc().unwrap().history.undo.len();
+    let ids = pasted(s.execute("edit.paste", &json!({"center": [150, 150]})).unwrap());
+    let g = parent(&s, a).unwrap();
+    assert_eq!(s.doc().unwrap().doc.node(g).unwrap().kind_label(), "Clip Group");
+    assert_eq!(parent(&s, ids[0]), Some(g), "the copy is inside the object");
+    assert_eq!(s.doc().unwrap().history.undo.len(), undo + 1);
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!(*s.doc().unwrap().doc, *before, "one undo step takes the copy and the clip group away");
+    s.execute("edit.redo", &json!({})).unwrap();
+    // Paste in Place and Paste on All Artboards (one copy per artboard) go into the same group,
+    // on top of what is in it.
+    let in_place = pasted(s.execute("edit.pasteInPlace", &json!({})).unwrap());
+    let all = pasted(s.execute("edit.pasteOnAllArtboards", &json!({})).unwrap());
+    assert_eq!(all.len(), 2);
+    let children: Vec<u64> = s.doc().unwrap().doc.node(g).unwrap().children().unwrap().iter().map(|n| n.id.0).collect();
+    assert_eq!(children.len(), 6, "{children:?}");
+    assert_eq!(children[1..], [a, ids[0], in_place[0], all[0], all[1]]);
+    // Paste Remembers Layers doesn't take the copy out of the object.
+    s.execute("layer.pasteRemembersLayers", &json!({"on": true})).unwrap();
+    let remembered = pasted(s.execute("edit.paste", &json!({})).unwrap());
+    assert_eq!(parent(&s, remembered[0]), Some(g));
+    // Paste in Front and Paste in Back ignore the drawing mode: next to the selection.
+    s.execute("layer.pasteRemembersLayers", &json!({"on": false})).unwrap();
+    s.execute("select.set", &json!({"ids": [a]})).unwrap();
+    let front = pasted(s.execute("edit.pasteInFront", &json!({})).unwrap());
+    assert_eq!(parent(&s, front[0]), Some(g));
+    let d = &s.doc().unwrap().doc;
+    let at = |id: u64| d.position(NodeId(id)).unwrap().1;
+    assert_eq!(at(front[0]), at(a) + 1, "just above the selected object");
+    // The object isolated (a double-click with the Selection tool) before anything went inside.
+    let mut s = session();
+    let b = s.execute("shape.rectangle", &json!({"x": 100, "y": 100, "width": 100, "height": 100})).unwrap()["id"].as_u64().unwrap();
+    s.execute("shape.ellipse", &json!({"x": 20, "y": 20, "width": 50, "height": 50})).unwrap();
+    s.execute("edit.copy", &json!({})).unwrap();
+    s.execute("select.set", &json!({"ids": [b]})).unwrap();
+    s.execute("view.drawMode", &json!({"mode": "inside"})).unwrap();
+    s.select_tool("selection", ViewInfo::default()).unwrap();
+    s.pointer(&vectorcraft_tools::PointerEvent::new(vectorcraft_tools::PointerKind::DoubleClick, 150.0, 150.0), ViewInfo::default()).unwrap();
+    assert_eq!(s.doc().unwrap().isolation, Some(NodeId(b)));
+    let ids = pasted(s.execute("edit.paste", &json!({})).unwrap());
+    let g = parent(&s, b).unwrap();
+    assert_eq!((s.doc().unwrap().doc.node(g).unwrap().kind_label(), parent(&s, ids[0])), ("Clip Group", Some(g)));
+}
+
+/// In Draw Behind, Paste in Place and Paste on All Artboards put the copies just below the
+/// selection, as Paste in Back does; Paste puts them on top, as in Draw Normal.
+#[test]
+fn paste_in_place_in_draw_behind_goes_behind_the_selection() {
+    let mut s = session();
+    let a = s.execute("shape.rectangle", &json!({"x": 100, "y": 100, "width": 100, "height": 100})).unwrap()["id"].as_u64().unwrap();
+    s.execute("shape.ellipse", &json!({"x": 20, "y": 20, "width": 50, "height": 50})).unwrap();
+    s.execute("edit.copy", &json!({})).unwrap();
+    s.execute("select.set", &json!({"ids": [a]})).unwrap();
+    s.execute("view.drawMode", &json!({"mode": "behind"})).unwrap();
+    let order = |s: &Session| s.doc().unwrap().doc.layers[0].children().unwrap().iter().map(|n| n.id.0).collect::<Vec<_>>();
+    let first = |r: Value| r["ids"][0].as_u64().unwrap();
+    let placed = first(s.execute("edit.pasteInPlace", &json!({})).unwrap());
+    let o = order(&s);
+    let at = |id: u64| o.iter().position(|x| *x == id).unwrap();
+    assert_eq!(at(placed) + 1, at(a), "just below the selected rectangle: {o:?}");
+    s.execute("select.set", &json!({"ids": [a]})).unwrap();
+    let all = first(s.execute("edit.pasteOnAllArtboards", &json!({})).unwrap());
+    let o = order(&s);
+    let at = |id: u64| o.iter().position(|x| *x == id).unwrap();
+    assert_eq!(at(all) + 1, at(a), "{o:?}");
+    s.execute("select.set", &json!({"ids": [a]})).unwrap();
+    let pasted = first(s.execute("edit.paste", &json!({})).unwrap());
+    assert_eq!(order(&s).last(), Some(&pasted), "Paste: on top");
+}
+
+/// #3705: Shift+D (`view.drawMode {}`) goes Draw Normal → Draw Behind → Draw Inside → Draw Normal
+/// with one path selected, and from Draw Behind back to Draw Normal when Draw Inside can't draw
+/// into the selection: one group (such as the clip group Draw Inside made), one image, several
+/// objects or none. It used to stop at Draw Behind with one object selected that isn't a path,
+/// compound path or type.
+#[test]
+fn shift_d_goes_past_draw_behind_whatever_is_selected() {
+    let mut s = session();
+    let a = s.execute("shape.rectangle", &json!({"x": 0, "y": 0, "width": 100, "height": 100})).unwrap()["id"].as_u64().unwrap();
+    let b = s.execute("shape.ellipse", &json!({"x": 120, "y": 0, "width": 50, "height": 50})).unwrap()["id"].as_u64().unwrap();
+    let cycle = |s: &mut Session| (0..3).map(|_| s.execute("view.drawMode", &json!({})).map(|r| r["mode"].clone()).unwrap()).collect::<Vec<_>>();
+    s.execute("select.set", &json!({"ids": [a]})).unwrap();
+    assert_eq!(cycle(&mut s), [json!("behind"), json!("inside"), json!("normal")]);
+    s.execute("select.set", &json!({"ids": [a, b]})).unwrap();
+    assert_eq!(cycle(&mut s), [json!("behind"), json!("normal"), json!("behind")]);
+    s.execute("view.drawMode", &json!({"mode": "normal"})).unwrap();
+    let g = s.execute("object.group", &json!({})).unwrap()["id"].as_u64().unwrap();
+    s.execute("select.set", &json!({"ids": [g]})).unwrap();
+    assert_eq!(cycle(&mut s), [json!("behind"), json!("normal"), json!("behind")], "one group selected");
+    assert!(s.draw_inside.is_none());
+    s.execute("view.drawMode", &json!({"mode": "normal"})).unwrap();
+    s.execute("select.none", &json!({})).unwrap();
+    assert_eq!(cycle(&mut s), [json!("behind"), json!("normal"), json!("behind")]);
+    // Asked for by name, Draw Inside is still refused without a path, compound path or type.
+    s.execute("select.set", &json!({"ids": [g]})).unwrap();
+    assert!(s.execute("view.drawMode", &json!({"mode": "inside"})).is_err());
+}
+
 #[test]
 fn export_for_screens_writes_every_combination() {
     let mut s = Session::new();

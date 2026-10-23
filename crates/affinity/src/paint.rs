@@ -126,6 +126,9 @@ pub struct Stroke {
 /// Gradient stops per gradient.
 const MAX_STOPS: usize = 1024;
 
+/// Dash and gap lengths per dash pattern (a pattern has a few; strokes and text runs copy theirs).
+const MAX_DASHES: usize = 64;
+
 fn floats(v: &Value) -> Option<Vec<f64>> {
     match v {
         Value::Floats(f) => Some(f.clone()),
@@ -283,7 +286,7 @@ pub(crate) fn node_paint(r: &mut Reader, id: ObjId, local: Affine) -> (Vec<Paint
     (fills, stroke.into_iter().collect())
 }
 
-fn stroke(r: &mut Reader, pen: ObjId, ldsc: ObjId, local: Affine, behind: bool) -> Option<Stroke> {
+pub(crate) fn stroke(r: &mut Reader, pen: ObjId, ldsc: ObjId, local: Affine, behind: bool) -> Option<Stroke> {
     let s = r.s;
     let paint = descriptor(r, pen, local)?;
     if paint == Paint::None {
@@ -295,6 +298,13 @@ fn stroke(r: &mut Reader, pen: ObjId, ldsc: ObjId, local: Affine, behind: bool) 
     let scales = s.bool(ldsc, b"LDSc").unwrap_or(true);
     let width = if scales { weight * local.scale() } else { weight };
     let data = s.bytes(lsty, b"Data").unwrap_or_default();
+    // Byte 10 is the stroke's style: 0 none, 1 solid, 2 dashed, 3 a brush. A shape without a
+    // stroke still stores one (black, 1 px wide), with style 0. Identified on two documents their
+    // owner made, where every such stroke is invisible in Affinity's own PDF export, and checked
+    // against the public corpus's thumbnails.
+    if data.get(10) == Some(&0) {
+        return None;
+    }
     let miter_limit = data.get(0..8).and_then(|b| b.try_into().ok()).map(f64::from_le_bytes).filter(|m| m.is_finite() && *m >= 1.0).unwrap_or(4.0);
     // Cap and join bytes are only partly understood: (0, 0) is butt/miter in every clean sample;
     // (2, 2) ends plain lines square and brush lines round; joins import round, which never
@@ -312,6 +322,10 @@ fn stroke(r: &mut Reader, pen: ObjId, ldsc: ObjId, local: Affine, behind: bool) 
         _ => Align::Center,
     };
     let dash = match s.field(lsty, b"Patn") {
+        Some(Value::Array(a)) if a.len() > MAX_DASHES => {
+            r.warn("dash patterns of more than 64 lengths (imported as solid lines)");
+            None
+        }
         Some(Value::Array(a)) if data.get(10) == Some(&2) || !a.is_empty() => {
             let mut v: Vec<f64> = a.iter().filter_map(|x| if let Value::Float(f) = x { Some(*f) } else { None }).collect();
             while v.len() >= 2 && v.iter().rev().take(2).all(|x| *x == 0.0) {

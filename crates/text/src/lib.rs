@@ -10,6 +10,8 @@
 //! Frames (`TextKind::Area`) and paths (`TextKind::OnPath`) are interpreted in text space.
 #![forbid(unsafe_code)]
 
+mod bitmap;
+mod colr;
 mod composer;
 pub mod craft_fonts;
 pub mod edit;
@@ -24,10 +26,12 @@ mod layout;
 mod shape;
 #[cfg(not(target_arch = "wasm32"))]
 mod suitcase;
+mod svg_glyph;
 #[cfg(any(test, feature = "test-fonts"))]
 pub mod test_fonts;
 pub mod thread;
 
+pub use bitmap::GlyphImage;
 pub use craft_fonts::{CRAFT_FONTS, CraftFont, WEB_FONTS, WebFont};
 pub use features::{EXTRA_FEATURES, LIGATURE_TRACKING_LIMITS, OtFeatures, explicit_ligatures, ligatures_suppressed_by};
 pub use fontdb::{
@@ -35,6 +39,9 @@ pub use fontdb::{
     is_font_file, is_suitcase, set_app_font_dir, set_platform_font_files, set_user_font_dirs, style_weight, system_font_dirs, user_font_dirs,
 };
 pub use hyphen::{hyphenation_exceptions, set_hyphenation_exceptions};
+use std::sync::Arc;
+pub use svg_glyph::{SvgGlyphReader, set_svg_glyph_reader};
+
 use kurbo::{Affine, BezPath, Point, Rect, Vec2};
 pub use layout::{decorations, fit_first_line, layout, layout_with, scaled};
 pub use vectorcraft_doc::TextObject;
@@ -118,6 +125,26 @@ pub struct PositionedGlyph {
     /// (Justification…), Desired and justification together: 1 at 100%. Horizontal Scale isn't
     /// included.
     pub scale: f64,
+    /// A colour bitmap glyph (emoji), drawn through `xf` instead of an outline: its `outline` is
+    /// empty. Also a COLR glyph whose paints documents have no form for, drawn as an image.
+    pub image: Option<Arc<GlyphImage>>,
+    /// A colour glyph's art (COLR layers, an SVG document's art), drawn through `xf` instead of an
+    /// outline: a group in font units (y down). Its `outline` is empty.
+    pub colour: Option<Arc<vectorcraft_doc::Node>>,
+}
+
+impl PositionedGlyph {
+    /// The glyph's colour bitmap, and the transform from its pixels to text space.
+    pub fn placed_image(&self) -> Option<(&Arc<GlyphImage>, Affine)> {
+        self.image.as_ref().map(|i| (i, self.xf * i.xf))
+    }
+    /// The glyph's colour art placed through `to_doc` (text space → where they go): a copy of
+    /// [`Self::colour`], transformed, its nodes without ids.
+    pub fn placed_colour(&self, to_doc: Affine) -> Option<vectorcraft_doc::Node> {
+        let mut art = (**self.colour.as_ref()?).clone();
+        art.transform(to_doc * self.xf, true);
+        Some(art)
+    }
 }
 
 /// One line of laid-out text.
@@ -596,6 +623,10 @@ mod tests_axes;
 #[cfg(test)]
 mod tests_bidi;
 #[cfg(test)]
+mod tests_bitmaps;
+#[cfg(test)]
+mod tests_colr;
+#[cfg(test)]
 mod tests_combos;
 #[cfg(test)]
 mod tests_devanagari;
@@ -603,6 +634,8 @@ mod tests_devanagari;
 mod tests_embed;
 #[cfg(test)]
 mod tests_fit;
+#[cfg(test)]
+mod tests_hang;
 #[cfg(test)]
 mod tests_inline;
 #[cfg(test)]
@@ -615,6 +648,8 @@ mod tests_ruby;
 mod tests_scripts;
 #[cfg(test)]
 mod tests_snap;
+#[cfg(test)]
+mod tests_svg_glyphs;
 #[cfg(test)]
 mod tests_sysfonts;
 #[cfg(test)]

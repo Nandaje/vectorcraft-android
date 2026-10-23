@@ -338,9 +338,9 @@ fn slider_strip(ctx: &egui::Context) -> (Rect, Pos2, Pos2, Pos2) {
     (r, Pos2::new(r.left() + 8.0 + 14.0, y), Pos2::new(r.left() + 8.0 + 28.0 + 6.0 + 90.0, y), Pos2::new(r.right() - 8.0 - 14.0, y))
 }
 
-/// Object › Path › Simplify opens a slider under the selection that previews the 1 pt result.
-/// Dragging it to the right previews more anchor points and to the left fewer, and Enter keeps the
-/// result as one undo step.
+/// Object › Path › Simplify opens a slider under the selection that previews the auto-simplified
+/// result (the path is 285 pt wide: level 55, 0.7125 pt). Dragging it to the right previews more
+/// anchor points and to the left fewer, and Enter keeps the result as one undo step.
 #[test]
 fn simplify_opens_a_slider_whose_drag_previews_fewer_or_more_points() {
     let (ctx, mut app) = (ctx(), app_with_dense_path());
@@ -348,8 +348,8 @@ fn simplify_opens_a_slider_whose_drag_previews_fewer_or_more_points() {
     crate::menus::invoke(&mut app, "object.path.simplify", json!({}));
     assert_eq!(app.ui.dialog.as_ref().map(|d| d.kind.as_str()), Some(simplify_slider::KIND));
     settle(&ctx, &mut app);
-    assert_eq!(simplify_preview(&app), json!({"level": 50.0}));
-    assert_eq!(anchor_count(&app), 2, "the 1 pt result");
+    assert_eq!(simplify_preview(&app), json!({"level": 55.0}));
+    assert_eq!(anchor_count(&app), 2, "the auto-simplified result");
     let (_, _, rail, _) = slider_strip(&ctx);
     drag(&ctx, &mut app, rail, vec2(100.0, 0.0));
     assert_eq!(simplify_preview(&app), json!({"level": 100.0}));
@@ -367,6 +367,40 @@ fn simplify_opens_a_slider_whose_drag_previews_fewer_or_more_points() {
     assert!(app.ui.dialog.is_none() && !app.session.in_interaction());
     assert_eq!(app.session.doc().unwrap().history.undo.len(), undo_len + 1);
     assert_eq!(anchor_count(&app), 2);
+}
+
+/// A wave of 20 anchors `width` pt wide and `width / 5` pt high, selected.
+fn app_with_wave(width: f64) -> VectorcraftApp {
+    let mut app = VectorcraftApp::new(Session::new(), Default::default());
+    app.run("file.new", json!({"width": 2000, "height": 2000})).unwrap();
+    let anchors: Vec<_> = (0..20)
+        .map(|i| {
+            let t = i as f64 / 19.0;
+            json!({"x": 30.0 + width * t, "y": 500.0 + width / 5.0 * (3.0 * std::f64::consts::PI * t).sin()})
+        })
+        .collect();
+    app.run("path.create", json!({"anchors": anchors})).unwrap();
+    app
+}
+
+/// Object › Path › Simplify opens the slider at Auto-Simplify's level for the selection's size,
+/// not at a fixed level, and the canvas previews the paths as Auto-Simplify leaves them.
+#[test]
+fn simplify_slider_opens_at_the_auto_simplify_level_of_the_selection() {
+    let ctx = ctx();
+    // 1/400 of the longer side: 2.85 pt (level 35), 0.7125 pt (55), 0.07125 pt (89).
+    for (width, level) in [(1140.0, 35.0), (285.0, 55.0), (28.5, 89.0)] {
+        let mut app = app_with_wave(width);
+        crate::menus::invoke(&mut app, "object.path.simplify", json!({}));
+        assert_eq!(app.ui.dialog.as_ref().unwrap().f64("level", -1.0), level, "{width} pt");
+        settle(&ctx, &mut app);
+        assert_eq!(simplify_preview(&app), json!({ "level": level }), "{width} pt");
+        let previewed = app.session.doc().unwrap().doc.clone();
+        cancel(&mut app);
+        let auto = app.run("object.path.simplify", json!({"auto": true})).unwrap();
+        assert_eq!(auto["level"], json!(level), "{width} pt");
+        assert_eq!(app.session.doc().unwrap().doc, previewed, "{width} pt: the preview is Auto-Simplify's result");
+    }
 }
 
 /// Escape, taken by the app's key handling before the dialog layer draws, closes the Simplify
@@ -420,15 +454,17 @@ fn simplify_slider_stays_where_it_opened_while_the_preview_changes_the_bounds() 
     assert_eq!(rect_of(&ctx, egui::Id::new(("dialog", simplify_slider::KIND))), opened);
 }
 
-/// Auto-Simplify moves the slider to the level that keeps the path within 1/400 of its size, and a
-/// click outside the strip keeps the result as one undo step.
+/// Auto-Simplify moves the slider back to the level that keeps the path within 1/400 of its size,
+/// and a click outside the strip keeps the result as one undo step.
 #[test]
 fn simplify_slider_auto_simplify_and_a_click_outside_keep_the_result() {
     let (ctx, mut app) = (ctx(), app_with_dense_path());
     let before = app.session.doc().unwrap().doc.clone();
     let undo_len = app.session.doc().unwrap().history.undo.len();
     crate::menus::invoke(&mut app, "object.path.simplify", json!({}));
+    app.ui.dialog.as_mut().unwrap().fields.insert("level".into(), json!(100));
     settle(&ctx, &mut app);
+    assert_eq!(simplify_preview(&app), json!({"level": 100.0}));
     let (_, auto, ..) = slider_strip(&ctx);
     click(&ctx, &mut app, auto);
     // The path is 285 pt wide: 0.7125 pt at most, level 55.

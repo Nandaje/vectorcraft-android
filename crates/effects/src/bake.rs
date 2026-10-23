@@ -122,9 +122,10 @@ fn bake_node(d: &mut Document, n: &Node) -> Option<Node> {
         let m = reshape(n, symbol.as_deref())?;
         return Some(bake_node(d, &m).unwrap_or(m));
     }
-    // A path whose Transform effect copies it with a gradient: each copy an object of its own, so
-    // its gradient fits it rather than spanning every copy.
-    if crate::has_gradient_copies(n)
+    // A path whose Transform effect copies it with a gradient, or scales its strokes or moves its
+    // patterns: each copy an object of its own, so its gradient fits it rather than spanning
+    // every copy and its strokes and patterns can differ from the others'.
+    if crate::has_transform_art(n)
         && let Some(m) = reshape(n, None)
     {
         return Some(bake_pieces(d, m));
@@ -565,7 +566,7 @@ pub fn bake_appearance(n: &Node) -> Option<Node> {
                     }
                     None => {
                         let effects = st.effects.clone();
-                        let fill = FillLayer { opacity: st.opacity, blend: st.blend, effects, ..FillLayer::new(st.paint.clone()) };
+                        let fill = FillLayer { opacity: st.opacity, blend: st.blend, effects, ..FillLayer::new(st.paint.stroke_as_fill()) };
                         piece(outline, FillRule::NonZero, AppearanceItem::Fill(fill))
                     }
                 }
@@ -671,6 +672,22 @@ mod tests {
         let ch = m.children().unwrap();
         let Some(AppearanceItem::Fill(f)) = ch[1].appearance.items.first() else { panic!("the outline is filled") };
         assert_eq!(f.effects.iter().map(|e| e.id.as_str()).collect::<Vec<_>>(), ["stylize.dropShadow"]);
+    }
+
+    #[test]
+    fn a_baked_stroke_leaves_dither_behind() {
+        // Strokes ignore dither, so the filled outline goes without it and looks as the stroke did.
+        let mut n = Node::path(NodeId(50), shapes::rectangle(Rect::new(0.0, 0.0, 100.0, 100.0)), Appearance::default_art());
+        if let AppearanceItem::Stroke(s) = &mut n.appearance.items[1] {
+            let mut g = vectorcraft_color::GradientPaint::new(Default::default());
+            g.gradient.dither = true;
+            s.paint = Paint::Gradient(Box::new(g));
+        }
+        let m = bake_appearance(&n).unwrap();
+        let ch = m.children().unwrap();
+        let Some(AppearanceItem::Fill(f)) = ch[1].appearance.items.first() else { panic!("the outline is filled") };
+        let Paint::Gradient(g) = &f.paint else { panic!("a gradient fill") };
+        assert!(!g.gradient.dither);
     }
 
     #[test]
@@ -1034,7 +1051,7 @@ mod tests {
     fn gradient_copies(id: u64) -> Node {
         use vectorcraft_color::{Gradient, GradientKind, GradientPaint, GradientStop};
         let stops = vec![GradientStop::new(0.0, Color::rgb(1.0, 0.0, 0.0)), GradientStop::new(1.0, Color::rgb(0.0, 0.0, 1.0))];
-        let paint = Paint::Gradient(Box::new(GradientPaint::new(Gradient { kind: GradientKind::Linear, stops })));
+        let paint = Paint::Gradient(Box::new(GradientPaint::new(Gradient::new(GradientKind::Linear, stops))));
         let mut n = Node::path(NodeId(id), shapes::rectangle(Rect::new(0.0, 0.0, 10.0, 10.0)), Appearance::basic(paint, Paint::None, 0.0));
         n.appearance.effects.push(fx("distort.transform", json!({"moveH": 30, "copies": 2})));
         n

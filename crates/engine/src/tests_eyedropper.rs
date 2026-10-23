@@ -407,10 +407,10 @@ fn rgb_gradient_and_mesh_colors_given_to_a_cmyk_document_separate_through_the_co
     assert_eq!(colors(&s)[1], blue);
     // New stops recolor the three points from their CMYK values.
     s.execute("paint.editGradient", &json!({"stops": [{"offset": 0, "color": "#ffffff"}, {"offset": 1, "color": "#ff0000"}]})).unwrap();
-    let stored = vectorcraft_color::Gradient {
-        kind: Default::default(),
-        stops: vec![vectorcraft_color::GradientStop::new(0.0, managed_cmyk(Color::WHITE)), vectorcraft_color::GradientStop::new(1.0, red)],
-    };
+    let stored = vectorcraft_color::Gradient::new(
+        Default::default(),
+        vec![vectorcraft_color::GradientStop::new(0.0, managed_cmyk(Color::WHITE)), vectorcraft_color::GradientStop::new(1.0, red)],
+    );
     // The points mix in the model the stops share (#2829): CMYK here.
     assert_eq!(colors(&s), [0.0, 0.5, 1.0].map(|t| stored.sample_with(t, Color::lerp_keep_model).0), "{:?}", colors(&s));
 

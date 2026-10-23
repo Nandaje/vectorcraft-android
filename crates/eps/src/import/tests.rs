@@ -633,6 +633,46 @@ pub(super) fn check(cond: &str) {
     blue(&format!("{cond} {{ 0 0 1 setrgbcolor }} {{ 1 0 0 setrgbcolor }} ifelse"));
 }
 
+/// #3547: a line before counted metadata ends in CR/LF. Leaving LF unread shifts the
+/// metadata by one byte and makes its final `>` look like PostScript instead of data.
+#[test]
+fn readline_keeps_counted_metadata_aligned_for_every_line_ending() {
+    let tiff = crate::tiff::encode(&Raster { width: 4, height: 4, rgba: [0, 128, 0, 255].repeat(16) }, false, false).unwrap();
+    for eol in ["\n", "\r", "\r\n"] {
+        let ps = eps(&format!(
+            "/consume {{ currentfile 80 string readline pop pop currentfile 4 string readstring pop pop }} bind def\n\
+             consume\nheader{eol}<x/>\n0 0 1 setrgbcolor 10 20 30 40 rectfill"
+        ));
+        for bytes in [ps.clone(), crate::dos_eps(&ps, &tiff).unwrap()] {
+            let r = import(&bytes).unwrap();
+            assert!(!r.preview, "valid art must not become the low-resolution TIFF preview");
+            assert!(r.warnings.is_empty(), "{eol:?}: {:?}", r.warnings);
+            let art = objects(&r.document);
+            assert_eq!(art.len(), 1);
+            assert!(matches!(art[0].kind, NodeKind::Path { .. }));
+            assert_eq!(fill(&art[0]), Some(&Paint::solid(Color::rgb(0.0, 0.0, 1.0))));
+        }
+    }
+}
+
+/// CR/LF is one terminator in buffered and decoded streams too; lone CR never consumes
+/// the next payload byte, EOF is safe, and ordinary `readstring` preserves binary CR/LF.
+#[test]
+fn readline_streams_preserve_the_next_payload_byte() {
+    for eol in ["\n", "\r", "\r\n"] {
+        let bytes = format!("header{eol}XY");
+        let hex: String = bytes.bytes().map(|b| format!("{b:02x}")).collect();
+        for source in [format!("<{hex}> /ReusableStreamDecode filter"), format!("({hex}>) /ASCIIHexDecode filter")] {
+            check(&format!(
+                "/f {source} def f 32 string readline exch (header) eq and \
+                 f 2 string readstring exch (XY) eq and and"
+            ));
+        }
+    }
+    check("/f <6865616465720d> /ReusableStreamDecode filter def f 32 string readline exch (header) eq and f read not and");
+    check("/f <0d0a5859> /ReusableStreamDecode filter def f 4 string readstring exch <0d0a5859> eq and");
+}
+
 #[test]
 fn the_generic_category_defines_new_categories() {
     // #234: the reference app's prolog.

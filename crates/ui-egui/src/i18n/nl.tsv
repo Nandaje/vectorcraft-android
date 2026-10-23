@@ -730,7 +730,7 @@
 	Units	Eenheden
 	Guides & Grid	Hulplijnen en raster
 	Hyphenation	Afbreking
-	Performance & Storage	Prestaties en opslag
+	Plug-ins & Scratch Disks	Plug-ins & Scratchschijven
 	User Interface	Gebruikersinterface
 	Performance	Prestaties
 	File Handling	Bestandsbeheer
@@ -2198,11 +2198,11 @@ lighting	Light	Licht
 	Fonts whose licence doesn't allow embedding are not copied.	Lettertypen waarvan de licentie insluiten niet toestaat, worden niet gekopieerd.
 	Package collects a saved document with its linked files and fonts.	Verpakken verzamelt een opgeslagen document met zijn gekoppelde bestanden en lettertypen.
 	Package created	Pakket gemaakt
-	Packaged {n} file(s) in {folder}{note}	{n} bestand(en) verpakt in {folder}{note}
+	Packaged {n} file(s) in {folder} {note}	{n} bestand(en) verpakt in {folder} {note}
 	Packaged {n} file(s){note}	{n} bestand(en) verpakt{note}
 	Relink Linked Files to the Document	Gekoppelde bestanden opnieuw koppelen aan het document
 	Save the document first?	Wil je het document eerst opslaan?
-	{count} file(s) in {folder}{note}. Show the package folder?	{count} bestand(en) in {folder}{note}. De pakketmap openen?
+	{count} file(s) in {folder} {note}. Show the package folder?	{count} bestand(en) in {folder} {note}. De pakketmap openen?
 	{count} linked file(s) not found	{count} gekoppelde bestand(en) niet gevonden
 	fonts not copied: {fonts}	niet gekopieerde lettertypen: {fonts}
 	Built-in presets are read-only: New… starts an editable copy.	Ingebouwde voorinstellingen zijn alleen-lezen: Nieuw… start een bewerkbare kopie.
@@ -2249,6 +2249,8 @@ lighting	Light	Licht
 	File Dimensions	Bestandsafmetingen
 	Transforms	Transformaties
 	Background Color:	Achtergrondkleur:
+	Show Center Mark	Middenmarkering tonen
+	Show Cross Hairs	Dradenkruis tonen
 	Client-side (.html)	Client-side (.html)
 	Color Reduction:	Kleurreductie:
 	Lossless (lossy WebP isn't available yet)	Verliesvrij (WebP met verlies is nog niet beschikbaar)
@@ -3839,6 +3841,7 @@ imageTrace	Outline	Contour
 @msg	Couldn't copy to the system clipboard: {e}	Kon niet naar het systeemklembord kopiëren: {e}
 @msg	Couldn't open {name}: {e}	Kon {name} niet openen: {e}
 @msg	Couldn't place {name}: the document it was dropped on was closed	Kon {name} niet plaatsen: het document waarop het werd neergezet, is gesloten
+@msg	Couldn't place {name}: the document it was placed in was closed	Kon {name} niet plaatsen: het document waarin het werd geplaatst, is gesloten
 @msg	Couldn't read {name}: {e}	Kon {name} niet lezen: {e}
 @msg	Couldn't save recovery data: {e}	Kon herstelgegevens niet opslaan: {e}
 @msg	Create Outlines: select text objects	Contouren maken: selecteer tekstobjecten
@@ -3876,7 +3879,7 @@ imageTrace	Outline	Contour
 @msg	Outline Stroke: no stroked paths selected	Lijn omzetten in contouren: geen paden met een lijn geselecteerd
 @msg	PDF settings are not an object	PDF-instellingen zijn geen object
 @msg	PDF writer error: {0}	PDF-schrijffout: {0}
-@msg	Packaged {n} file(s) in {folder}{note}	{n} bestand(en) verpakt in {folder}{note}
+@msg	Packaged {n} file(s) in {folder} {note}	{n} bestand(en) verpakt in {folder} {note}
 @msg	Packaged {n} file(s){note}	{n} bestand(en) verpakt{note}
 @msg	Preview in Browser needs the desktop app (the web downloads files instead)	Voorvertoning in browser heeft de desktop-app nodig (het web downloadt in plaats daarvan bestanden)
 @msg	Release Guides: no guides	Hulplijnen vrijgeven: geen hulplijnen
@@ -4180,6 +4183,7 @@ imageTrace	Outline	Contour
 @msg	path is already closed	pad is al gesloten
 @msg	paths contain invalid coordinates	paden bevatten ongeldige coördinaten
 @msg	paths: give at least one file	paden: geef minstens één bestand
+@msg	replace: the object to replace was changed or deleted	vervangen: het te vervangen object is gewijzigd of verwijderd
 @msg	pattern missing	patroon ontbreekt
 @msg	patterns nested too deeply are filled with mid-grey	patronen die te diep genest zijn, worden gevuld met middelgrijs
 @msg	percent must be above 0 and at most 6400, not {p}	procent moet boven 0 en maximaal 6400 zijn, niet {p}
@@ -4364,6 +4368,8 @@ imageTrace	Outline	Contour
 @msg	Saving	Bezig met opslaan
 @msg	Saving {_1}	Bezig met opslaan van {_1}
 @msg	Exporting {_1}	Bezig met exporteren van {_1}
+@msg	Packaging {_1}	Bezig met verpakken van {_1}
+@msg	Placing {_1}	Bezig met plaatsen van {_1}
 @msg	Saving recovery data for {_1}	Bezig met opslaan van herstelgegevens voor {_1}
 @msg	Discarded {_1} recovered document(s)	{_1} hersteld(e) document(en) verworpen
 @msg	Restored {_1} recovered document(s): save them to keep them	{_1} hersteld(e) document(en) teruggezet: sla ze op om ze te behouden
@@ -4446,7 +4452,9 @@ imageTrace	Outline	Contour
 @msg	automation filesystem access is not granted: read authority is absent: {path}	toegang tot het bestandssysteem voor automatisering is niet verleend: de leesbevoegdheid ontbreekt: {path}
 @msg	automation filesystem access is not granted: write authority is absent: {path}	toegang tot het bestandssysteem voor automatisering is niet verleend: de schrijfbevoegdheid ontbreekt: {path}
 @msg	automation path rejected: outside the read root {root}: {path}	automatiseringspad afgewezen: buiten de leesroot {root}: {path}
+@msg	automation path rejected: outside the read roots {roots}: {path}	automatiseringspad afgewezen: buiten de leesroots {roots}: {path}
 @msg	automation path rejected: outside the write root {root}: {path}	automatiseringspad afgewezen: buiten de schrijfroot {root}: {path}
+@msg	automation path rejected: outside the write roots {roots}: {path}	automatiseringspad afgewezen: buiten de schrijfroots {roots}: {path}
 @msg	automation path rejected: path is empty	automatiseringspad afgewezen: het pad is leeg
 @msg	automation path rejected: a link that leads nowhere: {path}	automatiseringspad afgewezen: een koppeling die nergens heen leidt: {path}
 @msg	automation path rejected: cannot resolve {path}: {e}	automatiseringspad afgewezen: kan {path} niet oplossen: {e}
@@ -5148,17 +5156,23 @@ swatch	Bright Violet	Felviolet
 @msg	no saved selection recalled	geen opgeslagen selectie opgeroepen
 	Merge only with selection	Alleen samenvoegen met selectie
 	Consider Open Filled Paths as Closed	Open gevulde paden als gesloten beschouwen
+	In Merge Mode, Clicking Stroke Splits the Path	In samenvoegmodus splitst klikken op de contour het pad
 	Pick Color From:	Kleur kiezen uit:
 	Artwork	Artwork
 	Cursor Swatch Preview	Staalvoorbeeld bij de cursor
 	Selection:	Selectie:
 	Straight Line	Rechte lijn
 	Highlight:	Markering:
+	Stroke When Editable	Contour indien bewerkbaar
 	Sketch	Schets
 	Halftone Pattern…	Rasterpatroon…
 	Halftone Pattern	Rasterpatroon
 	Torn Edges…	Gescheurde randen…
 	Torn Edges	Gescheurde randen
+	Conté Crayon…	Conté-krijt…
+	Conté Crayon	Conté-krijt
+	Foreground Level	Voorgrondniveau
+	Background Level	Achtergrondniveau
 	Pattern Type	Patroontype
 	Dot	Punt
 	Export Type:	Exporttype:
@@ -5304,6 +5318,10 @@ swatch	Bright Violet	Felviolet
 	Typing	Typen
 	Persistent	Permanent
 	Library Panel Options	Opties voor bibliotheekpaneel
+	Snapping	Uitlijnen
+	Snap to Tangent	Uitlijnen op raaklijn
+	Snap to Perpendicular	Uitlijnen op loodlijn
+@msg	unknown snap option `{key}` (use {options})	onbekende uitlijnoptie `{key}` (gebruik {options})
 	Gap Length:	Lengte van opening:
 	Locate Library…	Bibliotheek lokaliseren…
 
@@ -5339,6 +5357,7 @@ swatch	Bright Violet	Felviolet
 @msg	The image is {_1} × {_2} pixels, more than {LARGE_TRACE_SIDE} on a side: it is traced, but more slowly. A lower-fidelity preset or a smaller copy of the image traces faster.	De afbeelding is {_1} × {_2} pixels, meer dan {LARGE_TRACE_SIDE} aan één zijde: ze wordt getraceerd, maar langzamer. Een voorinstelling met minder detail of een kleinere kopie van de afbeelding traceert sneller.
 @msg	The image was traced at {_1} × {_2} pixels, scaled down from {_3} × {_4} ({_5} megapixels at most).	De afbeelding is getraceerd op {_1} × {_2} pixels, verkleind van {_3} × {_4} (maximaal {_5} megapixels).
 	Artboard {n} of {total}	Tekengebied {n} van {total}
+	File {n} of {total}	Bestand {n} van {total}
 	Encoding and writing the file…	Bestand coderen en schrijven…
 @plural	{n} more export waiting|{n} more exports waiting	Nog {n} export in de wachtrij|Nog {n} exports in de wachtrij
 	Continue in Background	Doorgaan op achtergrond
@@ -5407,6 +5426,7 @@ swatch	Bright Violet	Felviolet
 	Water Paper	Nat papier
 	Ruby…	Ruby…
 	Ruby	Ruby
+	Geometric Guides	Geometrische hulplijnen
 	Ease In	Langzaam beginnen
 	Ease Out	Langzaam eindigen
 	Ease In Out	Langzaam beginnen en eindigen
@@ -5417,3 +5437,34 @@ swatch	Bright Violet	Felviolet
 	Fresco	Fresco
 	Effect Gallery…	Effectgalerij…
 	Effect Gallery Dialog	Dialoogvenster Effectgalerij
+	Arc Segment Tool Options	Opties boogsegmentgereedschap
+	Base Along:	Basis langs:
+	Closed	Gesloten
+	Convex	Concaaf
+	Fill Arc	Boog vullen
+	Length X-Axis:	Lengte X-as:
+	Length Y-Axis:	Lengte Y-as:
+	Slope:	Helling:
+axis	X Axis	X-as
+axis	Y Axis	Y-as
+@msg	Packaged {n} file(s) in {folder}	{n} bestand(en) verpakt in {folder}
+@msg	Packaged {n} file(s) {note}	{n} bestand(en) verpakt {note}
+@msg	Packaged {n} file(s)	{n} bestand(en) verpakt
+	Packaged {n} file(s)	{n} bestand(en) verpakt
+	Packaged {n} file(s) in {folder}	{n} bestand(en) verpakt in {folder}
+	Packaged {n} file(s) {note}	{n} bestand(en) verpakt {note}
+	{count} file(s) in {folder}. Show the package folder?	{count} bestand(en) in {folder}. De pakketmap openen?
+	Clockwise	Met de klok mee
+	Dither	Dither
+	Fine noise hides banding in the gradient fill	Fijne ruis verbergt banden in de verloopvulling
+@msg	`dither` applies to gradient fills (stroke: false)	`dither` geldt voor verloopvullingen (stroke: false)
+@msg	`dither` applies to gradient fills (paint.setFill)	`dither` geldt voor verloopvullingen (paint.setFill)
+@msg	`dither` must be true or false	`dither` moet true of false zijn
+@msg	`method` must be classic or perceptual	`method` moet classic of perceptual zijn
+# Heavy plug-in filters (plugin.inspect, plug-in runs)
+	Install “{name}”, which asks for a heavy budget?	„{name}” installeren, dat om een groot rekenbudget vraagt?
+	Each run may take up to {minutes} minutes and do {times} times the work other plug-ins may. It runs in the background, and you can cancel it.	Elke run kan tot {minutes} minuten duren en {times} keer zoveel werk doen als andere plug-ins mogen. Hij draait op de achtergrond en je kunt hem annuleren.
+	It may take minutes, so it runs in the background, where you can cancel it.	Dit kan minuten duren, dus het draait op de achtergrond, waar je het kunt annuleren.
+	The plug-in is computing…	De plug-in is aan het rekenen…
+	Inspect Plug-in	Plug-in inspecteren
+	Cancel Plug-in Run	Plug-in-run annuleren

@@ -1,6 +1,6 @@
 //! VectorCraft desktop app.
 //!
-//! Usage: `vectorcraft [--control <port> [--automation-read-root <dir>] [--automation-write-root <dir>]]
+//! Usage: `vectorcraft [--control <port> [--automation-read-root <dir>]... [--automation-write-root <dir>]...]
 //! [--in-window-menus] [files…]`, `vectorcraft --version`, `vectorcraft --help` (or `-h`)
 //!
 //! `--in-window-menus` (or `VECTORCRAFT_IN_WINDOW_MENUS=1`) keeps the menus inside the window on
@@ -30,6 +30,8 @@ mod control_server;
 mod cursor_theme;
 #[cfg(feature = "wgpu")]
 mod gpu;
+#[cfg(target_os = "linux")]
+mod linux_stylus;
 mod logging;
 #[cfg(target_os = "macos")]
 mod mac_fonts;
@@ -51,6 +53,7 @@ mod printing;
 mod system_fonts;
 mod window;
 mod window_frame;
+mod windows_stylus;
 mod xwayland;
 
 use vectorcraft_engine::Session;
@@ -70,6 +73,12 @@ struct App {
     frames: u64,
     /// Keeps the custom title bar's window borderless (Windows, #1758).
     window_frame: Option<window_frame::WindowFrameFn>,
+    /// The main window; used to read and set maximized state the UI layer does not see on Linux (#3635).
+    winit_window: Option<std::sync::Arc<winit::window::Window>>,
+    /// A saved or fitted geometry asked for maximize once the window is mapped (Linux).
+    pending_maximize: bool,
+    /// Frames left to retry [`window::apply_pending_maximize`].
+    maximize_tries: u8,
 }
 
 impl eframe::App for App {
@@ -89,6 +98,9 @@ impl eframe::App for App {
         if self.app.services.native_menu.is_some() {
             mac_menu::raw_input_hook(raw);
         }
+        // A pen contact with the barrel button held presses the secondary button (Windows Ink).
+        #[cfg(all(windows, not(target_vendor = "win7")))]
+        windows_stylus::raw_input_hook(raw);
         file_access::unconfined(|| self.app.raw_input_hook(raw));
     }
     #[cfg_attr(not(target_os = "macos"), allow(unused_variables))]
@@ -147,7 +159,15 @@ impl App {
             open_files(&mut self.app, open_documents::take());
         }
         self.app.logic(ctx);
-        window::track(ctx, &mut self.app.ui.window);
+        if self.pending_maximize {
+            if let Some(w) = &self.winit_window {
+                self.pending_maximize = window::apply_pending_maximize(w, true, &mut self.maximize_tries);
+            } else {
+                self.pending_maximize = false;
+            }
+        }
+        let host_maximized = self.winit_window.as_ref().map(|w| w.is_maximized());
+        window::track(ctx, &mut self.app.ui.window, host_maximized);
         if self.app.ui.status == "quit" {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
@@ -725,7 +745,9 @@ Options:
   --control <port>               Start the localhost JSON-lines control server on <port>
                                  (or VECTORCRAFT_CONTROL_PORT)
   --automation-read-root <dir>   Confine the files control requests read to <dir>
+                                 (may be given more than once)
   --automation-write-root <dir>  Confine the files control requests write to <dir>
+                                 (may be given more than once)
   --in-window-menus              Keep the menus inside the window on macOS
                                  (or VECTORCRAFT_IN_WINDOW_MENUS=1)
   --version                      Print the version and exit
@@ -774,7 +796,7 @@ fn main() -> std::process::ExitCode {
             _ => files.push(a),
         }
     }
-    let automation_args::AutomationArgs { read_root, write_root, .. } = roots_args;
+    let automation_args::AutomationArgs { read_roots, write_roots, .. } = roots_args;
     // After the arguments: `--control` and `--version` win over a bad environment value.
     let control_port = match control.port {
         Some(port) => Some(port),
@@ -813,12 +835,14 @@ fn main() -> std::process::ExitCode {
     // The roots confine the control channel: a bad one keeps the app from starting rather than
     // leaving agents unconfined. Without a control port there is nothing to confine.
     let roots = if control_port.is_none() {
-        if read_root.is_some() || write_root.is_some() {
+        if !read_roots.is_empty() || !write_roots.is_empty() {
             log::warn!("--automation-read-root and --automation-write-root confine the control channel: ignored without --control");
         }
         None
     } else {
-        match AutomationRoots::new(read_root.as_deref(), write_root.as_deref()) {
+        let read: Vec<&std::path::Path> = read_roots.iter().map(std::path::PathBuf::as_path).collect();
+        let write: Vec<&std::path::Path> = write_roots.iter().map(std::path::PathBuf::as_path).collect();
+        match AutomationRoots::new(&read, &write) {
             Ok(roots) => roots,
             Err(e) => {
                 log::error!("{e}");
@@ -890,6 +914,18 @@ fn main() -> std::process::ExitCode {
         }
         options
     };
+    // With Windows Ink, winit reports a pen as a touch and drops its barrel button; the message
+    // hook notes each pointer contact and whether it starts with the barrel button held
+    // (`windows_stylus`).
+    #[cfg(all(windows, not(target_vendor = "win7")))]
+    let options = {
+        use winit::platform::windows::EventLoopBuilderExtWindows as _;
+        let mut options = options;
+        options.event_loop_builder = Some(Box::new(|builder| {
+            builder.with_msg_hook(windows_stylus::msg_hook);
+        }));
+        options
+    };
     #[cfg(feature = "wgpu")]
     let options = {
         let mut options = options;
@@ -934,9 +970,18 @@ fn main() -> std::process::ExitCode {
     #[cfg(feature = "wgpu")]
     let created = startup.clone();
     // A panic that ends the window (egui-wgpu's own, #502) is caught here: never a crash.
+    let run = |options: eframe::NativeOptions, app_creator: eframe::AppCreator<'_>| {
+        #[cfg(target_os = "linux")]
+        {
+            linux_stylus::run_native("VectorCraft", options, app_creator)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            eframe::run_native("VectorCraft", options, app_creator)
+        }
+    };
     let outcome = vectorcraft_engine::guard::catch_panic(|| {
-        eframe::run_native(
-            "VectorCraft",
+        run(
             options,
             Box::new(move |cc| {
                 let mut session = Session::new();
@@ -949,11 +994,15 @@ fn main() -> std::process::ExitCode {
                 // which takes over from the copy the preferences file used to hold.
                 prefs_dir::attach_pdf_preset_store(&mut app.session);
                 // Fit the window to its monitor, or put it back where it was (still hidden).
-                if let Some(w) = cc.winit_window() {
-                    app.ui.window = Some(window::restore(w, saved_window));
+                let winit_window = cc.winit_window().cloned();
+                if let Some(w) = &winit_window {
+                    let g = window::restore(w, saved_window);
+                    app.ui.window = Some(g);
                     #[cfg(windows)]
                     set_taskbar_icon(w);
                 }
+                // Linux may not map the window before the first frames, so a saved maximize is retried then (#3635).
+                let pending_maximize = cfg!(target_os = "linux") && app.ui.window.as_ref().is_some_and(|g| g.maximized);
                 // User Defined swatch and graphic style libraries live next to the preferences.
                 let swatches = prefs_path().and_then(|p| Some(p.parent()?.join("Swatches").to_string_lossy().to_string()));
                 app.session.swatch_libraries.set_user_dir(swatches);
@@ -1015,7 +1064,7 @@ fn main() -> std::process::ExitCode {
                         // Everywhere the app doesn't say whose work it is (worker threads), the
                         // roots hold: unconfined is only what the person at the keyboard does.
                         file_access::confine_process(roots.clone());
-                        log::info!("control channel confined to the automation roots: read {:?}, write {:?}", roots.read_root(), roots.write_root());
+                        log::info!("control channel confined to the automation roots: {}", roots.describe());
                     }
                 }
                 #[cfg(target_os = "macos")]
@@ -1034,7 +1083,16 @@ fn main() -> std::process::ExitCode {
                 created.ready();
                 // The content and the pointer stay aligned on Windows (#1758).
                 let window_frame = window_frame::service(cc, custom_titlebar);
-                Ok(Box::new(App { app, graphics_loss, graphics_lost: false, frames: 0, window_frame }))
+                Ok(Box::new(App {
+                    app,
+                    graphics_loss,
+                    graphics_lost: false,
+                    frames: 0,
+                    window_frame,
+                    winit_window,
+                    pending_maximize,
+                    maximize_tries: 8,
+                }))
             }),
         )
     });

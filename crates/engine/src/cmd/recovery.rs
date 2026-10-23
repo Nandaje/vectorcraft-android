@@ -999,7 +999,7 @@ fn restore_one(s: &mut Session, store: &Arc<dyn RecoveryStore>, file: &str) -> R
         doc.title = if meta.title.is_empty() { stem.to_string() } else { meta.title.clone() };
     }
     // Linked files are looked for from the document's own folder.
-    let links = super::links::resolve(&mut doc, meta.path.as_deref(), s.prefs.update_links == "automatically");
+    let links = super::links::resolve(&mut doc, meta.path.as_deref(), s.prefs.update_links == "automatically", s.prefs.low_res_proxy_eps);
     let index = s.add_document(doc, meta.path.clone());
     let st = s.doc_mut()?;
     st.recovered = true;

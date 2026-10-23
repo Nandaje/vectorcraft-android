@@ -181,7 +181,7 @@ fn shading_paint(g: vectorcraft_three_d::ShadeGradient, color: impl Fn(f64) -> C
     use vectorcraft_doc::color::{Gradient, GradientGeom, GradientKind, GradientPaint, GradientStop};
     let stops =
         g.brightness.into_iter().enumerate().map(|(i, s)| GradientStop { opacity: opacity(s), ..GradientStop::new(i as f32, color(s)) }).collect();
-    let mut paint = GradientPaint::new(Gradient { kind: GradientKind::Linear, stops });
+    let mut paint = GradientPaint::new(Gradient::new(GradientKind::Linear, stops));
     paint.geom = Some(GradientGeom { start: g.start, end: g.end, aspect: 1.0, focal: None });
     Paint::Gradient(Box::new(paint))
 }

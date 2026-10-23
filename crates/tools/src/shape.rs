@@ -8,7 +8,7 @@
 //! the dragged corner snap to Smart Guides ([`DrawSnap`]), hovering before the press too.
 
 use serde_json::{Value, json};
-use vectorcraft_geom::{Point, Rect, Vec2};
+use vectorcraft_geom::{Affine, Point, Rect, Vec2};
 
 use crate::guides::{DrawSnap, Leave, square};
 use crate::{Action, Cursor, Mods, Overlay, PointerEvent, PointerKind, Tool, ToolContext, ToolKey};
@@ -96,18 +96,29 @@ impl ShapeTool {
         match self.id {
             "polygon" | "star" => None,
             "lineSegment" => Some(Leave::segment(cx, start, m.shift)),
-            _ => Some(Leave::diagonal(start, m.shift)),
+            // With a Constrain Angle, Shift's square is taken along the rotated axes
+            // ([`Self::command_at`]), not the page's diagonal.
+            _ => Some(Leave::diagonal(start, m.shift && vectorcraft_geom::constrain_axes(cx.constrain_angle).is_none())),
         }
     }
 
     /// The command for a drag from `start` to `p` (snapped: a line's end already keeps Shift's
     /// angle).
     pub fn command(&self, start: Point, p: Point, m: Mods) -> (String, Value) {
+        self.command_at(start, p, m, 0.0)
+    }
+
+    /// [`Self::command`] with General › Constrain Angle `base` (degrees, counter-clockwise):
+    /// rectangles, rounded rectangles and ellipses are drawn along the x and y axes turned by it,
+    /// as the reference app draws new objects along the rotated axes
+    /// (<https://helpx.adobe.com/illustrator/desktop/manage-objects/arrange-objects/rotate-objects-by-specific-angles.html>).
+    pub fn command_at(&self, start: Point, p: Point, m: Mods, base: f64) -> (String, Value) {
         match self.id {
             "polygon" | "star" => {
                 let v = p - start;
                 let r = v.hypot().max(0.01);
-                let rot = if m.shift { 0.0 } else { (v.atan2().to_degrees() + 90.0) % 360.0 };
+                // Shift keeps the base orientation: upright, turned by the Constrain Angle.
+                let rot = if m.shift { vectorcraft_geom::constrain_rotation(base).unwrap_or(0.0) } else { (v.atan2().to_degrees() + 90.0) % 360.0 };
                 if self.id == "polygon" {
                     ("shape.polygon".into(), json!({ "cx": start.x, "cy": start.y, "radius": r, "sides": self.sides, "rotation": rot }))
                 } else {
@@ -123,14 +134,41 @@ impl ShapeTool {
                 ("shape.line".into(), json!({ "x1": a.x, "y1": a.y, "x2": b.x, "y2": b.y }))
             }
             _ => {
-                let r = drag_rect(start, p, m);
                 let cmd = if self.id == "ellipse" { "shape.ellipse" } else { "shape.rectangle" };
-                let mut v = json!({ "x": r.x0, "y": r.y0, "width": r.width(), "height": r.height() });
+                let mut v = box_params(start, p, m, base);
                 if self.id == "roundedRectangle" {
                     v["radius"] = json!(self.corner_radius);
                 }
                 (cmd.into(), v)
             }
+        }
+    }
+}
+
+/// The box a drag from `start` to `p` draws (from its centre with Alt, square with Shift),
+/// measured along the page axes turned by Constrain Angle `base`: the box in those axes, and the
+/// axes (`None` for the page's own: 0° or a whole turn, where the box is on the page exactly).
+/// The drawn shape and its size label both come from it.
+pub(crate) fn turned_box(start: Point, p: Point, m: Mods, base: f64) -> (Rect, Option<Affine>) {
+    match vectorcraft_geom::constrain_axes(base) {
+        None => (drag_rect(start, p, m), None),
+        Some(axes) => {
+            let back = axes.inverse();
+            (drag_rect(back * start, back * p, m), Some(axes))
+        }
+    }
+}
+
+/// The `{x, y, width, height, rotation?}` params of the box a drag from `start` to `p` draws along
+/// Constrain Angle `base` ([`turned_box`]): the box's page position at 0° or a whole turn, else
+/// the turned box's centre out on the page again with the rotation that turns it about it.
+pub(crate) fn box_params(start: Point, p: Point, m: Mods, base: f64) -> Value {
+    match turned_box(start, p, m, base) {
+        (r, None) => json!({ "x": r.x0, "y": r.y0, "width": r.width(), "height": r.height() }),
+        (r, Some(axes)) => {
+            let c = axes * r.center();
+            let rotation = -vectorcraft_geom::normalize_deg(base);
+            json!({ "x": c.x - r.width() / 2.0, "y": c.y - r.height() / 2.0, "width": r.width(), "height": r.height(), "rotation": rotation })
         }
     }
 }
@@ -189,7 +227,7 @@ impl Tool for ShapeTool {
                     self.began = true;
                     out.push(Action::Begin(self.label().into()));
                 }
-                let (c, v) = self.command(s, ev.pos, ev.mods);
+                let (c, v) = self.command_at(s, ev.pos, ev.mods, cx.constrain_angle);
                 out.push(Action::Preview(c, v));
                 out
             }
@@ -209,7 +247,7 @@ impl Tool for ShapeTool {
             _ => vec![],
         }
     }
-    fn key(&mut self, _cx: &ToolContext, key: ToolKey, _mods: Mods) -> Vec<Action> {
+    fn key(&mut self, cx: &ToolContext, key: ToolKey, _mods: Mods) -> Vec<Action> {
         let Some(s) = self.start.filter(|_| self.began) else { return vec![] };
         let changed = match (self.id, key) {
             ("polygon", ToolKey::Up) => {
@@ -239,7 +277,7 @@ impl Tool for ShapeTool {
             _ => false,
         };
         if changed {
-            let (c, v) = self.command(s, self.last, self.mods);
+            let (c, v) = self.command_at(s, self.last, self.mods, cx.constrain_angle);
             vec![Action::Preview(c, v)]
         } else if key == ToolKey::Escape {
             self.start = None;
@@ -261,7 +299,8 @@ impl Tool for ShapeTool {
                 let (w, h) = match self.id {
                     "polygon" | "star" => ((self.last - s).x.abs(), (self.last - s).y.abs()),
                     _ => {
-                        let r = drag_rect(s, self.last, self.mods);
+                        // Along the Constrain Angle's axes, as the box is drawn (`command_at`).
+                        let (r, _) = turned_box(s, self.last, self.mods, cx.constrain_angle);
                         (r.width(), r.height())
                     }
                 };
@@ -371,6 +410,50 @@ mod tests {
         let (c, v) = t.command(Point::new(0.0, 0.0), Point::new(10.0, 4.0), Mods { shift: true, alt: true, ..Default::default() });
         assert_eq!(c, "shape.ellipse");
         assert_eq!(v, json!({"x": -10.0, "y": -10.0, "width": 20.0, "height": 20.0}));
+    }
+
+    /// General › Constrain Angle: a Shift-drag squares along the turned axes, and the shape turns
+    /// by the angle about its centre.
+    #[test]
+    fn constrain_angle_squares_along_the_turned_axes() {
+        let t = ShapeTool::new("rectangle");
+        let shift = Mods { shift: true, ..Default::default() };
+        // 45°: the drag straight right is a diagonal of the turned axes, so a square on it.
+        let (_, v) = t.command_at(Point::new(0.0, 0.0), Point::new(20.0, 0.0), shift, 45.0);
+        let side = 20.0 / 2f64.sqrt();
+        let near = |k: &str, want: f64| (v[k].as_f64().unwrap() - want).abs() < 1e-9;
+        assert!(near("width", side) && near("height", side) && near("rotation", -45.0), "{v}");
+        assert!(near("x", 10.0 - side / 2.0) && near("y", -side / 2.0), "centred on the drag's middle: {v}");
+        // Whole turns are the page's axes exactly: the same box as 0°, unturned.
+        let (a, b) = (Point::new(3.0, 4.0), Point::new(41.0, 17.0));
+        let flat = t.command_at(a, b, Mods::default(), 0.0);
+        for turn in [360.0, -360.0, 720.0] {
+            assert_eq!(t.command_at(a, b, Mods::default(), turn), flat, "{turn}°");
+        }
+        // A quarter turn is exact (no floating-point noise in the box).
+        let (_, v) = t.command_at(Point::new(0.0, 0.0), Point::new(20.0, 10.0), Mods::default(), 90.0);
+        assert_eq!((v["width"].as_f64(), v["height"].as_f64(), v["rotation"].as_f64()), (Some(10.0), Some(20.0), Some(-90.0)), "{v}");
+        let (_, w) = t.command_at(Point::new(0.0, 0.0), Point::new(20.0, 10.0), Mods::default(), 450.0);
+        assert_eq!(v, w, "450° is 90°");
+    }
+
+    /// The size label gives the box as drawn: measured along the Constrain Angle's axes.
+    #[test]
+    fn constrain_angle_size_label_measures_the_turned_box() {
+        let (d, _) = doc_with_rect();
+        let s = Selection::default();
+        let p = paint();
+        let mut cx = cx(&d, &s, &p);
+        cx.constrain_angle = 45.0;
+        let mut t = ShapeTool::new("rectangle");
+        t.pointer(&cx, &PointerEvent::new(PointerKind::Down, 300.0, 300.0));
+        let a = t.pointer(&cx, &PointerEvent::new(PointerKind::Drag, 340.0, 300.0));
+        let Some(Action::Preview(_, v)) = a.last() else { panic!("{a:?}") };
+        let (w, h) = (v["width"].as_f64().unwrap(), v["height"].as_f64().unwrap());
+        assert!((w - h).abs() < 1e-9 && (w - 40.0 / 2f64.sqrt()).abs() < 1e-9, "{v}");
+        let o = t.overlays(&cx);
+        assert!(o.iter().any(|o| matches!(o, Overlay::Measure { text, .. } if text == &cx.size_label(w, h))), "{o:?}");
+        assert!(!o.iter().any(|o| matches!(o, Overlay::Measure { text, .. } if text == &cx.size_label(40.0, 0.0))), "not the page box");
     }
 
     #[test]

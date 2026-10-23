@@ -11,7 +11,7 @@ mod support {
 use support::text_fixture::*;
 use vectorcraft_affinity::{
     Document, Limits,
-    model::{Align, Kind, Text},
+    model::{Align, Kind, Paragraph, Text},
     paint::{Color, Paint},
     synth::{F, tag},
 };
@@ -108,7 +108,7 @@ fn mixed_paragraph_alignments_are_explicitly_reported() {
     let d = read(vec![block(utf8("one\u{2029}"), vec![run(4, None)], &[2]), block(utf8("two"), vec![run(3, None)], &[0, 1])]);
     assert_eq!(content(text(&d)), "one\u{2029}two");
     assert_eq!(text(&d).align, Align::Right);
-    assert!(warning(&d, "mixed paragraph alignments"));
+    assert!(warning(&d, "mixed paragraph formats"));
 }
 
 #[test]
@@ -194,10 +194,22 @@ fn real_affinity3_text_fixtures_confirm_unicode_and_caps_fields() {
     assert_eq!(texts.len(), 2);
     assert!(texts[0].runs[0].all_caps);
     assert_eq!(texts[1].runs[0].features, ["smcp"]);
-    for name in ["patchy-text-indent.af", "patchy-text-para-spacing.af"] {
+    // Indents and paragraph spacing are read (values in document pixels, as these fixtures set
+    // them in Affinity's paragraph panel).
+    let paragraphs = |name: &str| -> Vec<Paragraph> {
         let d = load(name);
-        assert!(warning(&d, "paragraph indents or spacing"), "{name}: {:?}", d.warnings);
-    }
+        assert!(!warning(&d, "paragraph"), "{name}: {:?}", d.warnings);
+        d.spreads[0]
+            .nodes
+            .iter()
+            .filter_map(|n| if let Kind::Text(t) = &n.kind { Some(t) } else { None })
+            .flat_map(|t| t.runs.iter().map(|r| r.paragraph))
+            .collect()
+    };
+    let p = paragraphs("patchy-text-indent.af");
+    assert_eq!(p.iter().map(|p| (p.left, p.first, p.space_after)).collect::<Vec<_>>(), [(40.0, 0.0, 12.0), (0.0, 25.0, 12.0)]);
+    let p = paragraphs("patchy-text-para-spacing.af");
+    assert_eq!(p.iter().map(|p| (p.space_before, p.space_after)).collect::<Vec<_>>(), [(9.0, 17.0)]);
 }
 
 proptest::proptest! {
@@ -248,8 +260,18 @@ fn excessive_feature_settings_are_bounded_and_reported() {
 }
 
 #[test]
+fn font_names_longer_than_256_bytes_are_dropped() {
+    // Each paragraph and run carries its font's name: a huge one would be copied with each.
+    let d = read(vec![block(utf8("x"), vec![run(1, Some(attrs(&"F".repeat(257), "Inter-Regular", 400, false, 12.0)))], &[])]);
+    let r = &text(&d).runs[0];
+    assert!(r.family.is_empty() && r.postscript == "Inter-Regular");
+    assert!(warning(&d, "font names longer than 256 bytes"));
+}
+
+#[test]
 fn shared_font_metadata_amplification_is_bounded_without_losing_characters() {
-    let mut a = attrs(&"F".repeat(16 * 1024), &"P".repeat(16 * 1024), 400, false, 12.0);
+    // The longest font names kept (see `font_names_longer_than_256_bytes_are_dropped`).
+    let mut a = attrs(&"F".repeat(256), &"P".repeat(256), 400, false, 12.0);
     if let F::Obj(_, fields) = &mut a {
         let settings = F::Obj(
             tag(b"OtAt"),
@@ -266,11 +288,12 @@ fn shared_font_metadata_amplification_is_bounded_without_losing_characters() {
     }
     let F::Obj(class, fields) = a else { panic!("attributes must be an object") };
     let mut runs = vec![run(1, Some(F::Def(42, vec![class], fields)))];
-    runs.extend((2..=1000).map(|end| run(end, Some(F::Ref(42)))));
-    let d = read(vec![block(utf8(&"x".repeat(1000)), runs, &[])]);
+    // About 7.7 kB of names and features per run: the budget runs out after about 2200 runs.
+    runs.extend((2..=4000).map(|end| run(end, Some(F::Ref(42)))));
+    let d = read(vec![block(utf8(&"x".repeat(4000)), runs, &[])]);
     let t = text(&d);
-    assert_eq!(content(t), "x".repeat(1000));
-    assert_eq!(t.runs.len(), 1000);
+    assert_eq!(content(t), "x".repeat(4000));
+    assert_eq!(t.runs.len(), 4000);
     let metadata: usize = t
         .runs
         .iter()
@@ -279,7 +302,7 @@ fn shared_font_metadata_amplification_is_bounded_without_losing_characters() {
         .map(|s| s.len() + std::mem::size_of::<String>())
         .sum();
     assert!(metadata <= 16 << 20, "shared metadata was amplified to {metadata} bytes");
-    assert_eq!(t.runs[0].family.len(), 16 * 1024);
+    assert_eq!(t.runs[0].family.len(), 256);
     assert_eq!(t.runs[0].features.len(), 256);
     assert!(t.runs.last().unwrap().family.is_empty());
     assert!(t.runs.last().unwrap().features.is_empty());
@@ -319,4 +342,40 @@ fn shared_gradient_attributes_are_bounded_without_losing_characters() {
     assert!(matches!(t.runs.last().unwrap().fill, Paint::Solid(_)));
     assert!(warning(&d, "text attribute budget exceeded"));
     assert!(!warning(&d, "text without character attributes"), "budget recovery must not claim source attributes are absent");
+}
+
+#[test]
+fn shared_gradient_outlines_are_bounded_without_losing_characters() {
+    let color =
+        F::Def(43, vec![tag(b"RGBA")], vec![(tag(b"_col"), F::Struct([0.2f32, 0.4, 0.6, 1.0].iter().flat_map(|v| v.to_le_bytes()).collect()))]);
+    let mut colors = vec![color];
+    colors.extend((1..1024).map(|_| F::Ref(43)));
+    let positions = (0..1024).map(|i| [(i as f32) / 1023.0, 0.5].iter().flat_map(|v| v.to_le_bytes()).collect()).collect();
+    let pen = F::Obj(
+        tag(b"FilG"),
+        vec![(tag(b"Grad"), F::Obj(tag(b"Grad"), vec![(tag(b"Cols"), F::Shared(colors)), (tag(b"Posn"), F::Records(8, positions))]))],
+    );
+    let style = F::Obj(tag(b"LSty"), vec![(tag(b"Wght"), F::F64(2.0))]);
+    // `Objs` 1 and 2: the outline's paint and line style, shared by every run.
+    let attrs = F::Def(42, vec![tag(b"GAtt")], vec![(tag(b"Objs"), F::Shared(vec![solid(1.0), pen, style]))]);
+    let mut runs = vec![run(1, Some(attrs))];
+    runs.extend((2..=1000).map(|end| run(end, Some(F::Ref(42)))));
+    let d = read(vec![block(utf8(&"x".repeat(1000)), runs, &[])]);
+    let t = text(&d);
+    assert_eq!(content(t), "x".repeat(1000));
+    assert_eq!(t.runs.len(), 1000);
+    let stop_count: usize = t
+        .runs
+        .iter()
+        .filter_map(|r| r.stroke.as_ref())
+        .map(|s| match &s.paint {
+            Paint::Gradient(g) => g.stops.len(),
+            _ => 0,
+        })
+        .sum();
+    assert!(stop_count * std::mem::size_of::<vectorcraft_affinity::paint::Stop>() <= 16 << 20);
+    let Some(Paint::Gradient(first)) = t.runs[0].stroke.as_ref().map(|s| &s.paint) else { panic!("the first outline must fit") };
+    assert_eq!(first.stops.len(), 1024);
+    assert!(t.runs.last().unwrap().stroke.is_none());
+    assert!(warning(&d, "text attribute budget exceeded"));
 }

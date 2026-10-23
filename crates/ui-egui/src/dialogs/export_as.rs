@@ -140,7 +140,7 @@ fn confirm(app: &mut VectorcraftApp, d: &Dialog) -> Result<Value, String> {
         return Err("nothing to export: the document has no visible art (or turn on Use Artboards)".into());
     }
     app.ui.dialog = None;
-    let path = io::target_path(app, None, f.extensions[0])?;
+    let path = io::export_path(app, None, f)?;
     let range = if all { "all".to_string() } else { range };
     let r = options_or_write(app, f, plugin, path, use_artboards, all, range);
     // The options follow the save panel: the Enter that closed it isn't theirs (as in Save As).

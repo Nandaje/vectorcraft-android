@@ -104,23 +104,117 @@ fn styled(src: &Node, path: PathData, outline: bool) -> Node {
     n
 }
 
+/// Most segments a live Pathfinder effect takes in, as for the Shape Builder.
+pub const PATHFINDER_MAX_SEGMENTS: usize = po::SHAPE_BUILDER_MAX_SEGMENTS;
+
+/// Most pairs of input paths whose bounds overlap a live Pathfinder effect takes in. Crossings,
+/// and so the pieces of the result, grow with these pairs (n bars crossing n make n² crossings)
+/// and the effect runs on every draw: past this the group draws its art unprocessed (#3591).
+pub const PATHFINDER_MAX_OVERLAPS: usize = 16_384;
+
+/// Fenwick tree of counts over `n` slots, for counting the active boxes of [`within_budget`].
+struct Counts(Vec<isize>);
+
+// `isolate_lowest_one` is still unstable in Rust 1.96, and the workspace builds on 1.95 (rust-version).
+#[allow(clippy::manual_isolate_lowest_one)]
+impl Counts {
+    fn add(&mut self, slot: usize, d: isize) {
+        let mut i = slot + 1;
+        while let Some(c) = self.0.get_mut(i) {
+            *c += d;
+            i += i & i.wrapping_neg();
+        }
+    }
+
+    /// Sum of the slots before `end`.
+    fn before(&self, end: usize) -> isize {
+        let (mut i, mut s) = (end.min(self.0.len().saturating_sub(1)), 0);
+        while i > 0 {
+            s += self.0.get(i).copied().unwrap_or(0);
+            i -= i & i.wrapping_neg();
+        }
+        s
+    }
+}
+
+/// Can a live Pathfinder evaluate `leaves` within [`PATHFINDER_MAX_SEGMENTS`] and
+/// [`PATHFINDER_MAX_OVERLAPS`]? The overlapping pairs of bounds are counted exactly by a sweep
+/// in x that keeps the active boxes in two Fenwick trees over their y extents, so the check costs
+/// O(n log n) however the boxes are laid out.
+fn within_budget<'a>(leaves: impl IntoIterator<Item = &'a Node>) -> bool {
+    let mut segments = 0usize;
+    let mut boxes: Vec<Rect> = vec![];
+    for l in leaves {
+        let Some((path, _)) = geometry(l) else { continue };
+        segments += path.subpaths.iter().map(|sp| sp.segment_count()).sum::<usize>();
+        if segments > PATHFINDER_MAX_SEGMENTS {
+            return false;
+        }
+        boxes.extend(path.bounds());
+    }
+    let mut ys: Vec<f64> = boxes.iter().flat_map(|b| [b.y0, b.y1]).collect();
+    ys.sort_by(f64::total_cmp);
+    ys.dedup_by(|a, b| a.total_cmp(b).is_eq());
+    // Slots of the y values below `y`, and of those at or below it.
+    let below = |y: f64| ys.partition_point(|v| v.total_cmp(&y).is_lt());
+    let upto = |y: f64| ys.partition_point(|v| v.total_cmp(&y).is_le());
+    // (x, is end, box); starts sort before ends at the same x since touching boxes overlap.
+    let mut events: Vec<(f64, bool, usize)> = boxes.iter().enumerate().flat_map(|(i, b)| [(b.x0, false, i), (b.x1, true, i)]).collect();
+    events.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+    // Active boxes counted by the slot of their y0 and of their y1.
+    let mut by_y0 = Counts(vec![0; ys.len() + 1]);
+    let mut by_y1 = Counts(vec![0; ys.len() + 1]);
+    let (mut active, mut overlaps) = (0isize, 0usize);
+    for (_, end, i) in events {
+        let Some(b) = boxes.get(i) else { continue };
+        if end {
+            by_y0.add(below(b.y0), -1);
+            by_y1.add(below(b.y1), -1);
+            active -= 1;
+            continue;
+        }
+        // Active boxes not entirely below b (y1 < b.y0) nor entirely above it (y0 > b.y1).
+        let above = active - by_y0.before(upto(b.y1));
+        let under = by_y1.before(below(b.y0));
+        overlaps += usize::try_from(active - above - under).unwrap_or(0);
+        if overlaps > PATHFINDER_MAX_OVERLAPS {
+            return false;
+        }
+        by_y0.add(below(b.y0), 1);
+        by_y1.add(below(b.y1), 1);
+        active += 1;
+    }
+    true
+}
+
 /// Evaluate the visible Pathfinder effects of `group` in order: the resulting child objects.
-/// `None` when the group has no Pathfinder effect.
+/// `None` when the group has no Pathfinder effect. Past the budget ([`PATHFINDER_MAX_SEGMENTS`],
+/// [`PATHFINDER_MAX_OVERLAPS`]) it returns the children as they are.
 pub fn pathfinder_children(group: &Node, hook: Option<OutlineHook>) -> Option<Vec<Arc<Node>>> {
     if !has_pathfinder(group) {
         return None;
     }
-    let mut stack: Vec<Arc<Node>> = group.children()?.to_vec();
+    let source: &[Arc<Node>] = group.children()?;
+    let mut stack: Vec<Arc<Node>> = source.to_vec();
     for e in group.appearance.effects.iter().filter(|e| e.visible) {
         let Some(op) = op_of(&e.id) else { continue };
         let shape_mode =
             matches!(op, PathfinderOp::Unite | PathfinderOp::MinusFront | PathfinderOp::Intersect | PathfinderOp::Exclude | PathfinderOp::MinusBack);
+        let all: Vec<Vec<Node>> = stack
+            .iter()
+            .map(|c| {
+                let mut lv = vec![];
+                leaves(c, hook, &mut lv);
+                lv
+            })
+            .collect();
+        if !within_budget(all.iter().flatten()) {
+            return Some(source.to_vec());
+        }
         // (style source, shape) per stack entry; keys index `sources`.
         let mut sources: Vec<Node> = vec![];
         let mut shapes: Vec<po::Shape> = vec![];
-        for c in &stack {
-            let mut lv = vec![];
-            leaves(c, hook, &mut lv);
+        for mut lv in all {
             if shape_mode && lv.len() > 1 {
                 let parts: Vec<(PathData, FillRule)> = lv.iter().filter_map(geometry).collect();
                 let refs: Vec<(&PathData, FillRule)> = parts.iter().map(|(p, r)| (p, *r)).collect();
@@ -589,7 +683,7 @@ mod tests {
         }
         use vectorcraft_color::{Gradient, GradientGeom, GradientKind, GradientPaint, GradientStop};
         let stops = vec![GradientStop::new(0.0, Color::rgb(1.0, 0.0, 0.0)), GradientStop::new(1.0, Color::rgb(0.0, 0.0, 1.0))];
-        let ramp = GradientPaint::new(Gradient { kind: GradientKind::Linear, stops });
+        let ramp = GradientPaint::new(Gradient::new(GradientKind::Linear, stops));
         // The type's characters fit the gradient to its layout; the square has it placed across itself.
         let style = vectorcraft_doc::CharStyle { size: 40.0, fill: Paint::Gradient(Box::new(ramp.clone())), ..Default::default() };
         let text = vectorcraft_doc::TextObject::point(vectorcraft_geom::Point::new(5.0, 60.0), "IIII", style);
@@ -615,7 +709,7 @@ mod tests {
     fn a_transform_on_a_group_paints_each_copy_with_its_own_gradient() {
         use vectorcraft_color::{Gradient, GradientGeom, GradientKind, GradientPaint, GradientStop};
         let stops = vec![GradientStop::new(0.0, Color::rgb(1.0, 0.0, 0.0)), GradientStop::new(1.0, Color::rgb(0.0, 0.0, 1.0))];
-        let ramp = GradientPaint::new(Gradient { kind: GradientKind::Linear, stops });
+        let ramp = GradientPaint::new(Gradient::new(GradientKind::Linear, stops));
         let geom = GradientGeom { start: (0.0, 5.0).into(), end: (10.0, 5.0).into(), aspect: 1.0, focal: None };
         let paints = [Paint::Gradient(Box::new(ramp.clone())), Paint::Gradient(Box::new(GradientPaint { geom: Some(geom), ..ramp }))];
         for (k, paint) in paints.into_iter().enumerate() {
@@ -637,5 +731,67 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// A group with `effect` holding `n` vertical then `n` horizontal bars, 2 wide on a 4-unit
+    /// pitch, each crossing every bar of the other direction: n² crossings.
+    fn crossing_bars(n: usize, effect: &str) -> Node {
+        let len = 4.0 * n as f64;
+        let paint = Appearance::basic(Paint::solid(Color::rgb(1.0, 0.0, 0.0)), Paint::None, 0.0);
+        let mut children = vec![];
+        for i in 0..n {
+            let at = 4.0 * i as f64;
+            children.push(Arc::new(Node::path(NodeId(100 + i as u64), shapes::rectangle(Rect::new(at, 0.0, at + 2.0, len)), paint.clone())));
+        }
+        for i in 0..n {
+            let at = 4.0 * i as f64;
+            let id = NodeId(100 + (n + i) as u64);
+            children.push(Arc::new(Node::path(id, shapes::rectangle(Rect::new(0.0, at, len, at + 2.0)), paint.clone())));
+        }
+        let mut g = Node::group(NodeId(10), children);
+        g.appearance.effects.push(Effect { id: effect.into(), params: serde_json::json!({}), visible: true });
+        g
+    }
+
+    #[test]
+    fn pathfinder_past_its_budget_draws_the_source_art() {
+        // n² crossings past the cap: no evaluation (#3591), the source art as it is.
+        for n in [130, 800] {
+            let g = crossing_bars(n, "pathfinder.divide");
+            let out = pathfinder_children(&g, None).unwrap();
+            assert_eq!(out.len(), 2 * n, "{n} x {n} bars");
+            let ids: Vec<NodeId> = out.iter().map(|c| c.id).collect();
+            let src: Vec<NodeId> = g.children().unwrap().iter().map(|c| c.id).collect();
+            assert_eq!(ids, src, "{n} x {n} bars");
+            assert!(out.iter().zip(g.children().unwrap()).all(|(a, b)| a.path_data() == b.path_data()));
+        }
+    }
+
+    #[test]
+    fn pathfinder_within_its_budget_still_divides() {
+        // Each bar is cut into one piece per crossing plus the n pieces between and past them, so
+        // n x n bars divide into 3·n² pieces, and 128 x 128 bars, which overlap in exactly
+        // `PATHFINDER_MAX_OVERLAPS` pairs, must still divide.
+        for n in [8, 128] {
+            let out = pathfinder_children(&crossing_bars(n, "pathfinder.divide"), None).unwrap();
+            assert_eq!(out.len(), 3 * n * n, "{n} x {n} bars");
+        }
+    }
+
+    #[test]
+    fn pathfinder_on_many_stacked_bars_still_runs() {
+        // 3000 bars stacked in y all overlap in x, but each overlaps only the next one in y: 2999
+        // overlapping pairs are within the budget, so Add still merges them into one path.
+        let paint = Appearance::basic(Paint::solid(Color::rgb(1.0, 0.0, 0.0)), Paint::None, 0.0);
+        let children = (0..3000)
+            .map(|i| {
+                let at = 1.5 * i as f64;
+                Arc::new(Node::path(NodeId(100 + i as u64), shapes::rectangle(Rect::new(0.0, at, 100.0, at + 2.0)), paint.clone()))
+            })
+            .collect();
+        let mut g = Node::group(NodeId(10), children);
+        g.appearance.effects.push(Effect { id: "pathfinder.add".into(), params: serde_json::json!({}), visible: true });
+        let out = pathfinder_children(&g, None).unwrap();
+        assert_eq!(out.len(), 1);
     }
 }

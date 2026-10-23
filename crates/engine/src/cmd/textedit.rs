@@ -1029,12 +1029,35 @@ fn type_step(s: &mut Session, p: &Value) -> Result<Value> {
                     1.0
                 };
                 let mut runs = edit::slice_runs(&t.runs, a, b);
-                for run in &mut runs {
+                // Auto leading steps from the leading its paragraph's Justification › Auto Leading
+                // sets, so each run covers one paragraph and knows which.
+                let mut paras = vec![];
+                if matches!(step, Step::Leading) {
+                    let plain = t.plain_text();
+                    let mut para = plain.get(..a).map_or(0, |s| s.bytes().filter(|&c| c == b'\n').count());
+                    let mut split = Vec::with_capacity(runs.len());
+                    for run in runs {
+                        if run.inline.is_some() || !run.text.contains('\n') {
+                            paras.push(para);
+                            para += run.text.bytes().filter(|&c| c == b'\n').count();
+                            split.push(run);
+                            continue;
+                        }
+                        for piece in run.text.split_inclusive('\n') {
+                            paras.push(para);
+                            para += usize::from(piece.ends_with('\n'));
+                            split.push(TextRun::new(piece, run.style.clone()));
+                        }
+                    }
+                    runs = split;
+                }
+                for (i, run) in runs.iter_mut().enumerate() {
                     let st = &mut run.style;
                     match step {
                         Step::Size => st.size = super::typecmd::local_type_value(t, st.size * points + inc, (0.1, 1296.0), false, C)?,
                         Step::Leading => {
-                            st.leading = Some(super::typecmd::local_type_value(t, st.effective_leading() * points + inc, (0.1, 5000.0), false, C)?);
+                            let leading = t.para_at(paras.get(i).copied().unwrap_or(0)).effective_leading(st);
+                            st.leading = Some(super::typecmd::local_type_value(t, leading * points + inc, (0.1, 5000.0), false, C)?);
                         }
                         Step::Tracking => st.tracking = (st.tracking + inc).clamp(-1000.0, 10000.0),
                         Step::Kerning => st.kerning = Some((st.kerning.unwrap_or(0.0) + inc).clamp(-1000.0, 10000.0)),

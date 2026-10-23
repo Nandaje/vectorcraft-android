@@ -520,7 +520,9 @@ pub(crate) fn fill_with_placeholder(t: &mut TextObject) {
         TextKind::Area { frame } => {
             let b = frame.bounds().unwrap_or_default();
             let chars_per_line = (b.width() / (style.size * 0.5)).max(1.0);
-            let lines = (b.height() / style.effective_leading()).max(1.0);
+            // The first paragraph's Auto Leading sets the leading of Auto type (a leading of 0
+            // counts as a tenth of a point a line).
+            let lines = (b.height() / t.para_at(0).effective_leading(&style).max(0.1)).max(1.0);
             let want = (chars_per_line * lines) as usize;
             let mut out = String::new();
             for (i, w) in PLACEHOLDER.split(' ').cycle().enumerate() {

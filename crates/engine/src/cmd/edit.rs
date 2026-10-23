@@ -119,7 +119,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Paste",
             ["Edit"],
             Some("Cmd+V"),
-            "{center?: [x, y], dx?, dy?, swatchConflict?} paste centred on `center` (the app passes the view centre), else offset by dx/dy (default: the Paste Offset preference). Pasting brings the image blobs, symbols, patterns, global and spot swatches (with the tint swatches of the tints used), gradient swatches, graphic styles, character and paragraph styles and brushes the objects use; one of the same name that differs comes in renamed. swatchConflict, for a swatch whose name the document gives another colour (clipboard.conflicts): \"merge\" (default: the objects take the document's swatch) | \"add\" (the pasted swatch comes in renamed) | {name: \"merge\"|\"add\"}. With Paste Remembers Layers on (layer.pasteRemembersLayers), objects go back into the layers they came from (by name; made when missing). Artboards copied with artboard.copy come with their art, together right of the last artboard as they lay (the other paste commands but Paste on All Artboards: where they were), their art back in the layers it came from, and the Artboard tool, when chosen, selects them → {ids, artboard: the first new artboard's index or null, artboards: the new artboards' indices, added: resources added, merged: conflicts merged, renamed: [{kind, from, to}]}",
+            "{center?: [x, y], dx?, dy?, swatchConflict?} paste centred on `center` (the app passes the view centre), else offset by dx/dy (default: the Paste Offset preference). Pasting brings the image blobs, symbols, patterns, global and spot swatches (with the tint swatches of the tints used), gradient swatches, graphic styles, character and paragraph styles and brushes the objects use; one of the same name that differs comes in renamed. swatchConflict, for a swatch whose name the document gives another colour (clipboard.conflicts): \"merge\" (default: the objects take the document's swatch) | \"add\" (the pasted swatch comes in renamed) | {name: \"merge\"|\"add\"}. With Paste Remembers Layers on (layer.pasteRemembersLayers), objects go back into the layers they came from (by name; made when missing). Artboards copied with artboard.copy come with their art, together right of the last artboard as they lay (the other paste commands but Paste on All Artboards: where they were), their art back in the layers it came from, and the Artboard tool, when chosen, selects them. In Draw Inside (view.drawMode) the objects go inside the object drawn into, as new art does, and Paste Remembers Layers doesn't apply; edit.pasteInPlace and edit.pasteOnAllArtboards do the same, and in Draw Behind they go behind the selection as edit.pasteInBack puts them; edit.pasteInFront and edit.pasteInBack ignore the drawing mode → {ids, artboard: the first new artboard's index or null, artboards: the new artboards' indices, added: resources added, merged: conflicts merged, renamed: [{kind, from, to}]}",
             has_clipboard,
             |s, p| paste(s, p, PasteMode::Offset)
         ),
@@ -146,7 +146,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Paste in Place",
             ["Edit"],
             Some("Cmd+Shift+V"),
-            "{swatchConflict?, artboard?: index (as edit.pasteInFront)} paste where the objects were copied (resources and layers as edit.paste) → {ids, added, merged, renamed}",
+            "{swatchConflict?, artboard?: index (as edit.pasteInFront)} paste where the objects were copied (resources, layers and drawing modes as edit.paste) → {ids, added, merged, renamed}",
             has_clipboard,
             |s, p| paste(s, p, PasteMode::InPlace)
         ),
@@ -155,7 +155,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Paste on All Artboards",
             ["Edit"],
             Some("Cmd+Alt+Shift+V"),
-            "{swatchConflict?} paste a copy on every artboard at the offset the objects had to the artboard they were copied from (resources and layers as edit.paste) → {ids, added, merged, renamed}",
+            "{swatchConflict?} paste a copy on every artboard at the offset the objects had to the artboard they were copied from (resources, layers and drawing modes as edit.paste) → {ids, added, merged, renamed}",
             has_clipboard,
             |s, p| paste(s, p, PasteMode::AllArtboards)
         ),
@@ -686,21 +686,30 @@ fn paste_clip(s: &mut Session, p: &Value, mode: PasteMode, clip: &Clipboard, cho
         .reduce(|a, b| a.union(b))
         .filter(|_| mode != PasteMode::AllArtboards)
         .map(|all| (&clip.artboards, if mode == PasteMode::Offset { super::panelcmds::beside_artboards(&st.doc, all) } else { Vec2::ZERO }));
-    // Paste Remembers Layers (not while isolating a group: pastes stay in it); an artboard's art
-    // always goes back into its layers.
+    // Drawing modes (#3705): Draw Inside puts what Paste, Paste in Place and Paste on All
+    // Artboards bring inside the object it draws into; Draw Behind puts what Paste in Place and
+    // Paste on All Artboards bring behind the selection, as Paste in Back does. Paste in Front and
+    // Paste in Back keep their own places, and copied artboards' art goes back into its layers.
+    let modal = boards.is_none() && matches!(mode, PasteMode::Offset | PasteMode::InPlace | PasteMode::AllArtboards);
+    // (Only with objects to paste: an artboard copied without art makes no clip group.)
+    let inside = s.draw_inside.filter(|t| modal && !clip.nodes.is_empty() && s.draw_mode == crate::DrawMode::Inside && st.doc.node(*t).is_some());
+    let behind = modal && mode != PasteMode::Offset && s.draw_mode == crate::DrawMode::Behind;
+    let (front, back) = (mode == PasteMode::Front, mode == PasteMode::Back || behind);
+    // Paste Remembers Layers (not while isolating a group: pastes stay in it, nor in Draw
+    // Inside); an artboard's art always goes back into its layers.
     // A drop goes into the current editable insertion context, not a same-named source layer.
     let remember = mode != PasteMode::Drag
+        && inside.is_none()
         && (st.doc.paste_remembers_layers || boards.is_some())
         && parent.is_some_and(|p| st.doc.node(p).is_some_and(Node::is_layer));
     // Front/back: relative to the selection (top-most / bottom-most selected object); with
     // nothing selected, the top / bottom of the current layer.
-    let anchor = match mode {
-        PasteMode::Front | PasteMode::Back => {
-            let order = st.selection.in_paint_order(&st.doc);
-            let a = if mode == PasteMode::Front { order.last() } else { order.first() };
-            a.and_then(|id| st.doc.position(*id))
-        }
-        _ => None,
+    let anchor = if front || back {
+        let order = st.selection.in_paint_order(&st.doc);
+        let a = if front { order.last() } else { order.first() };
+        a.and_then(|id| st.doc.position(*id))
+    } else {
+        None
     };
     let placements: Vec<Affine> = match (mode, boards) {
         (_, Some((_, dv))) => vec![Affine::translate(dv)],
@@ -717,6 +726,8 @@ fn paste_clip(s: &mut Session, p: &Value, mode: PasteMode, clip: &Clipboard, cho
     };
     let (ids, imported, artboards) = s.edit(mode.label(), |d, sel| {
         let imported = clip.import_into(d, choices, same_doc);
+        // Draw Inside: the clip group of the object drawn into, made on the first paste.
+        let into = inside.map(|t| super::create::draw_inside_group(d, t)).transpose()?;
         let artboards: Vec<usize> = boards
             .into_iter()
             .flat_map(|(all, dv)| all.iter().map(move |a| (a, dv)))
@@ -739,15 +750,17 @@ fn paste_clip(s: &mut Session, p: &Value, mode: PasteMode, clip: &Clipboard, cho
                     Some(Some(name)) if remember => Some(*layers.entry(name).or_insert_with(|| layer_named(d, name))),
                     _ => None,
                 };
-                let (par, idx) = match (anchor, layer) {
+                let (par, idx) = match (into, anchor, layer) {
+                    // Inside the object Draw Inside draws into, on top of what is in it already.
+                    (Some(group), ..) => (Some(group), usize::MAX),
                     // Next to the anchor, unless the object goes back to another layer.
-                    (Some((par, i, _)), l) if l.is_none() || l == par => {
+                    (None, Some((par, i, _)), l) if l.is_none() || l == par => {
                         let k = placed.get(&par).copied().unwrap_or(0);
-                        (par, if mode == PasteMode::Front { i + 1 + k } else { i + k })
+                        (par, if front { i + 1 + k } else { i + k })
                     }
-                    (_, l) => {
+                    (None, _, l) => {
                         let par = l.or(parent);
-                        (par, if mode == PasteMode::Back { placed.get(&par).copied().unwrap_or(0) } else { usize::MAX })
+                        (par, if back { placed.get(&par).copied().unwrap_or(0) } else { usize::MAX })
                     }
                 };
                 *placed.entry(par).or_default() += 1;

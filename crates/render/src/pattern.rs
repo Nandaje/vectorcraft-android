@@ -205,10 +205,18 @@ fn with_tile_renderer<T>(f: impl FnOnce(&mut Renderer) -> T) -> Option<T> {
         }))
     })?;
     let mut r = r;
+    // Restores the depth even if `f` panics and the panic is caught (the renderer is then dropped).
+    struct Restore;
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            CACHE.with(|c| c.borrow_mut().depth -= 1);
+        }
+    }
+    let guard = Restore;
     let out = f(&mut r);
+    drop(guard);
     CACHE.with(|c| {
         let mut c = c.borrow_mut();
-        c.depth -= 1;
         if c.renderer.is_none() {
             c.renderer = Some(r);
         }
@@ -686,5 +694,14 @@ mod tests {
         // A change within 2× keeps the raster.
         assert_eq!(raster_scale(2.1, (10.0, 10.0)), raster_scale(3.9, (10.0, 10.0)));
         assert!(raster_scale(64.0, (1000.0, 10.0)) * 1000.0 <= MAX_TILE_PX);
+    }
+
+    #[test]
+    fn tile_renderer_depth_survives_caught_panics() {
+        for _ in 0..4 {
+            let r = std::panic::catch_unwind(|| with_tile_renderer(|_| panic!("tile boom")));
+            assert!(r.is_err());
+        }
+        assert!(with_tile_renderer(|_| ()).is_some(), "depth leaked after caught panics");
     }
 }

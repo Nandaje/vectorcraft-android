@@ -721,13 +721,13 @@ mod tests {
     }
 
     fn sample() -> SwatchLibrary {
-        let grad = Paint::Gradient(Box::new(GradientPaint::new(Gradient {
-            kind: GradientKind::Linear,
-            stops: vec![
+        let grad = Paint::Gradient(Box::new(GradientPaint::new(Gradient::new(
+            GradientKind::Linear,
+            vec![
                 GradientStop { midpoint: 0.4, ..GradientStop::new(0.0, Color::cmyk(0.1, 0.2, 0.3, 0.0)) },
                 GradientStop { opacity: 0.5, ..GradientStop::new(1.0, Color::rgb8(255, 0, 0)) },
             ],
-        })));
+        ))));
         SwatchLibrary {
             name: "Brand */ Colours".into(),
             swatches: vec![
@@ -822,15 +822,15 @@ mod tests {
                 name: "Positions".into(),
                 swatches: vec![Swatch {
                     name: "Ramp".into(),
-                    paint: Paint::Gradient(Box::new(GradientPaint::new(Gradient {
+                    paint: Paint::Gradient(Box::new(GradientPaint::new(Gradient::new(
                         kind,
-                        stops: vec![
+                        vec![
                             GradientStop::new(0.0, Color::BLACK),
                             GradientStop::new(0.125, Color::rgb8(255, 0, 0)),
                             GradientStop::new(0.12890625, Color::WHITE),
                             GradientStop::new(1.0, Color::rgb8(0, 0, 255)),
                         ],
-                    }))),
+                    )))),
                     global: false,
                     spot: false,
                 }],

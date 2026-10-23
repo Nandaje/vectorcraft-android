@@ -956,3 +956,37 @@ fn zero_length_subpaths_draw_dots_with_their_cap() {
     let butt = dots(vectorcraft_doc::LineCap::Butt);
     assert_eq!(butt.pixels.iter().filter(|&&p| p != 255).count(), 0, "a butt cap draws no dot");
 }
+
+/// #2788: a dashed solid stroke is one paint, so its object opacity folds into its colour instead
+/// of compositing a viewport-wide layer; the result matches the layered one, overlapping dashes
+/// included.
+#[test]
+fn dashed_stroke_opacity_folds_into_its_colour() {
+    let dashed = |d: &mut Document, object: f32, stroke: f32| {
+        let mut n = rect_node(d, Rect::new(20.0, 20.0, 80.0, 60.0), Paint::None, Paint::solid(Color::rgb(0.2, 0.4, 0.9)), 6.0);
+        let st = n.appearance.stroke_mut().unwrap();
+        st.dash = Some(vectorcraft_doc::Dash { pattern: vec![4.0, 1.0], ..Default::default() });
+        st.cap = vectorcraft_doc::LineCap::Round;
+        st.opacity = stroke;
+        n.opacity = object;
+        n
+    };
+    let doc = |object: f32, stroke: f32| {
+        let mut d = Document::new(100.0, 100.0);
+        let n = dashed(&mut d, object, stroke);
+        let l = d.layers[0].id;
+        d.insert(Some(l), 0, n).unwrap();
+        d
+    };
+    let mut d = Document::new(100.0, 100.0);
+    assert_eq!(painted_items(&dashed(&mut d, 0.6, 1.0)), 1, "a dashed stroke takes the folded fast path");
+    let mut brushed = dashed(&mut d, 0.6, 1.0);
+    brushed.appearance.stroke_mut().unwrap().brush = Some("Calligraphic".into());
+    assert_ne!(painted_items(&brushed), 1, "a dashed brush stroke draws its pieces one by one: no folding");
+    let folded = render(&doc(0.6, 1.0));
+    let layered = render(&doc(1.0, 0.6));
+    assert_ne!(folded.pixel(20, 40), [255, 255, 255, 255], "the stroke is drawn");
+    for (a, b) in folded.pixels.chunks(4).zip(layered.pixels.chunks(4)) {
+        assert!(a.iter().zip(b).all(|(x, y)| (*x as i32 - *y as i32).abs() <= 1), "folded {a:?} vs layered {b:?}");
+    }
+}

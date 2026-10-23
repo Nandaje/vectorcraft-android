@@ -52,6 +52,17 @@ pub(crate) fn set_paint(ctx: &mut RenderContext, p: &Paint, bounds: Rect, f: &Fr
     }
 }
 
+/// [`set_paint`] for a fill: a dithered gradient (dither applies to fills only) with stops is
+/// drawn as pixels with fine noise ([`crate::dither`]).
+pub(crate) fn set_fill_paint(ctx: &mut RenderContext, p: &Paint, bounds: Rect, f: &Frame) -> bool {
+    match p {
+        Paint::Gradient(g) if g.gradient.dither && g.gradient.kind != GradientKind::Freeform && !g.gradient.stops.is_empty() => {
+            crate::dither::set_dithered_paint(ctx, g, bounds, f.ink)
+        }
+        _ => set_paint(ctx, p, bounds, f),
+    }
+}
+
 /// The most memory decoding one image may take: print rasters run to gigabytes (a 300 ppi roll,
 /// 6614 x 59055 px, is 1.56 GB as RGBA), past the decoder's 512 MB default. The web keeps it.
 const MAX_DECODE_ALLOC: u64 = if cfg!(target_arch = "wasm32") { 512 << 20 } else { 2 << 30 };

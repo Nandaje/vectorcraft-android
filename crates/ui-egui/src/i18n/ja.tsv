@@ -936,6 +936,8 @@
 	Average	平均
 	BLANK DOCUMENT PRESETS	空白のドキュメントプリセット
 	Background Color:	背景色:
+	Show Center Mark	中心マークを表示
+	Show Cross Hairs	十字線を表示
 	Background Contents	背景のカラー
 	Background Contents:	背景のカラー:
 	Background:	背景:
@@ -1499,6 +1501,7 @@
 	Keep selected	選択を保持
 	Merge only with selection	選択範囲とのみ結合
 	Consider Open Filled Paths as Closed	塗りのある開いたパスを閉じたパスとみなす
+	In Merge Mode, Clicking Stroke Splits the Path	結合モードで線をクリックするとパスを分割
 	Pick Color From:	色の取得元:
 	Artwork	アートワーク
 	Cursor Swatch Preview	ポインター横のスウォッチプレビュー
@@ -1506,6 +1509,7 @@
 	Freeform	自由形状
 	Straight Line	直線
 	Highlight:	強調表示:
+	Stroke When Editable	編集可能な線
 	Fill:	塗り:
 	Find	検索
 	Find Font	フォントを検索
@@ -2342,7 +2346,7 @@
 	Performance	パフォーマンス
 diagnostics	render	描画
 diagnostics	ui	UI
-	Performance & Storage	パフォーマンスとストレージ
+	Plug-ins & Scratch Disks	プラグイン & 仮想記憶ディスク
 	Permissions	権限
 	Permissions password:	権限パスワード:
 	Perspective Grid Options	遠近グリッドオプション
@@ -3209,7 +3213,7 @@ mark-style	Japanese	日本式
 	the preset	プリセット
 	tile {number}	タイル {number}
 	to	→
-	{count} file(s) in {folder}{note}. Show the package folder?	{folder} に {count} 個のファイル{note}。パッケージフォルダーを表示しますか？
+	{count} file(s) in {folder} {note}. Show the package folder?	{folder} に {count} 個のファイル{note}。パッケージフォルダーを表示しますか？
 	{count} linked file(s) not found	リンクファイルが {count} 個見つかりません
 	fonts not copied: {fonts}	コピーされなかったフォント：{fonts}
 	{count} linked image(s) changed since this document was saved. Show the new versions?	保存後に {count} 個のリンク画像が変更されています。新しいバージョンを表示しますか？
@@ -3486,7 +3490,7 @@ file-filter	Templates	テンプレート
 	Output Black	出力ブラック
 	Output White	出力ホワイト
 	Output › Mode	出力 › モード
-	Packaged {n} file(s) in {folder}{note}	{folder} に {n} 個のファイルをパッケージしました{note}
+	Packaged {n} file(s) in {folder} {note}	{folder} に {n} 個のファイルをパッケージしました{note}
 	Packaged {n} file(s){note}	{n} 個のファイルをパッケージしました{note}
 	Page information	ページ情報
 	Paragraph Style	段落スタイル
@@ -4293,6 +4297,8 @@ swatch	Bright Violet	ビビッドバイオレット
 @msg	SVG parse error: {0}	SVG を解析できませんでした: {0}
 @msg	decimals must be {_1}–{_2} (got {_3})	小数点以下の桁数は {_1} から {_2} までにしてください (指定値: {_3})
 @msg	Exporting {_1}	{_1} を書き出し中
+@msg	Packaging {_1}	{_1} をパッケージ中
+@msg	Placing {_1}	{_1} を配置中
 @msg	Exported {what}	{what} を書き出しました
 @msg	"{0}" is not a colour: write it as #rrggbb	「{0}」はカラーではありません: #rrggbb の形式で指定してください
 @msg	could not decode image: {0}	画像をデコードできませんでした: {0}
@@ -4339,7 +4345,7 @@ swatch	Bright Violet	ビビッドバイオレット
 @msg	{_1} linked image(s) changed on disk: Update Links shows the new versions	{_1} 個のリンク画像がディスク上で変更されました: 「リンクを更新」で新しいバージョンを表示できます
 @msg	Updated {_1} linked file(s) changed on disk	ディスク上で変更された {_1} 個のリンクファイルを更新しました
 @msg	pick a colour, gradient or pattern to save as a swatch	スウォッチとして保存するカラー、グラデーション、またはパターンを選択してください
-@msg	Packaged {n} file(s) in {folder}{note}	{n} 個のファイルを {folder} にパッケージしました{note}
+@msg	Packaged {n} file(s) in {folder} {note}	{n} 個のファイルを {folder} にパッケージしました{note}
 @msg	Packaged {n} file(s){note}	{n} 個のファイルをパッケージしました{note}
 @msg	choose a location for the package	パッケージの保存場所を選択してください
 @msg	missing `folder`	`folder` が指定されていません
@@ -4352,6 +4358,7 @@ swatch	Bright Violet	ビビッドバイオレット
 @msg	no plug-in {id} is installed	プラグイン {id} はインストールされていません
 @msg	{_1} is a live effect (Effect › Plug-ins)	{_1} はライブ効果です (「効果 › プラグイン」から使用してください)
 @msg	{_1} is an exporter (File › Export › Export As…)	{_1} は書き出しプラグインです (「ファイル › 書き出し › 形式を指定して書き出し…」から使用してください)
+@msg	`documentData` is {size} bytes (limit {MAX_DOCUMENT_DATA})	`documentData` は {size} バイトです (上限 {MAX_DOCUMENT_DATA})
 @msg	a preset named `{_1}` exists	`{_1}` という名前のプリセットはすでに存在します
 @msg	a swatch or color group named `{n}` exists	`{n}` という名前のスウォッチまたはカラーグループはすでに存在します
 @msg	no print preset named `{base}`	`{base}` という名前のプリントプリセットが見つかりません
@@ -4461,8 +4468,11 @@ swatch	Bright Violet	ビビッドバイオレット
 @msg	no swatch library `{l}` (see swatch.library.list)	スウォッチライブラリ `{l}` が見つかりません (swatch.library.list を参照)
 @msg	no user library folder here	この環境にはユーザーライブラリフォルダーがありません
 @msg	Couldn't place {name}: the document it was dropped on was closed	{name} を配置できませんでした: ドロップ先のドキュメントは閉じられています
+@msg	Couldn't place {name}: the document it was placed in was closed	{name} を配置できませんでした: 配置先のドキュメントは閉じられています
 @msg	no files to place	配置するファイルがありません
+@msg	`{file}` isn't a VectorCraft document, a PDF or a PDF-compatible .ai file	`{file}` は VectorCraft ドキュメント、PDF、PDF 互換の .ai ファイルのいずれでもありません
 @msg	paths: give at least one file	paths: ファイルを 1 つ以上指定してください
+@msg	replace: the object to replace was changed or deleted	replace: 置き換えるオブジェクトは変更または削除されています
 @msg	Couldn't place {name}: {e}	{name} を配置できませんでした: {e}
 @msg	no print service	プリントサービスがありません
 @msg	the print job has no data	プリントジョブにデータがありません
@@ -4535,7 +4545,9 @@ swatch	Bright Violet	ビビッドバイオレット
 @msg	automation filesystem access is not granted: read authority is absent: {path}	自動化にはファイルシステムへのアクセスが許可されていません: 読み込み権限がありません: {path}
 @msg	automation filesystem access is not granted: write authority is absent: {path}	自動化にはファイルシステムへのアクセスが許可されていません: 書き込み権限がありません: {path}
 @msg	automation path rejected: outside the read root {root}: {path}	自動化のパスを拒否しました: 読み込みルート {root} の外です: {path}
+@msg	automation path rejected: outside the read roots {roots}: {path}	自動化のパスを拒否しました: 読み込みルート {roots} のいずれの中でもありません: {path}
 @msg	automation path rejected: outside the write root {root}: {path}	自動化のパスを拒否しました: 書き込みルート {root} の外です: {path}
+@msg	automation path rejected: outside the write roots {roots}: {path}	自動化のパスを拒否しました: 書き込みルート {roots} のいずれの中でもありません: {path}
 @msg	automation path rejected: path is empty	自動化のパスを拒否しました: パスが空です
 @msg	automation path rejected: a link that leads nowhere: {path}	自動化のパスを拒否しました: リンク先が存在しません: {path}
 @msg	automation path rejected: cannot resolve {path}: {e}	自動化のパスを拒否しました: {path} を解決できません: {e}
@@ -4941,6 +4953,10 @@ lighting	Light	ライト
 	Halftone Pattern	ハーフトーンパターン
 	Torn Edges…	破れたエッジ…
 	Torn Edges	破れたエッジ
+	Conté Crayon…	コンテ…
+	Conté Crayon	コンテ
+	Foreground Level	前景レベル
+	Background Level	背景レベル
 	Pattern Type	パターンタイプ
 	Dot	ドット
 # User Interface › Color Scheme
@@ -4996,8 +5012,13 @@ lighting	Light	ライト
 @msg	too many library panels were opened in this session	このセッションで開いたライブラリパネルが多すぎます
 @msg	The image is {_1} × {_2} pixels, more than {LARGE_TRACE_SIDE} on a side: it is traced, but more slowly. A lower-fidelity preset or a smaller copy of the image traces faster.	画像は {_1} × {_2} ピクセルで、一辺が {LARGE_TRACE_SIDE} を超えています。トレースはできますが、時間がかかります。忠実度の低いプリセットや画像の小さいコピーを使うと速くなります。
 @msg	The image was traced at {_1} × {_2} pixels, scaled down from {_3} × {_4} ({_5} megapixels at most).	画像は {_3} × {_4} から縮小した {_1} × {_2} ピクセルでトレースされました (最大 {_5} メガピクセル)。
+	Snapping	スナップ
+	Snap to Tangent	接線にスナップ
+	Snap to Perpendicular	垂線にスナップ
+@msg	unknown snap option `{key}` (use {options})	不明なスナップオプション `{key}` ({options} を使用してください)
 	Gap Length:	ギャップの長さ:
 	Artboard {n} of {total}	アートボード {n} / {total}
+	File {n} of {total}	ファイル {n} / {total}
 	Encoding and writing the file…	ファイルをエンコードして書き込み中…
 @plural	{n} more export waiting|{n} more exports waiting	待機中の書き出し: あと {n} 件
 	Continue in Background	バックグラウンドで続行
@@ -5054,6 +5075,7 @@ lighting	Light	ライト
 	Yonroku-ban	四六判
 	Ruby…	ルビ…
 	Ruby	ルビ
+	Geometric Guides	幾何ガイド
 	Ease In	イーズイン
 	Ease Out	イーズアウト
 	Ease In Out	イーズインアウト
@@ -5079,3 +5101,41 @@ lighting	Light	ライト
 	Simulate prints overprints as Overprint Preview shows them; separations always keep them. A preset flattens transparency before printing (PostScript files always flatten it).	シミュレートでは、オーバープリントプレビューと同じ見え方でオーバープリントを印刷します。分版では常にオーバープリントが保持されます。プリセットを選ぶと、印刷前に透明が分割・統合されます (PostScript ファイルでは常に分割・統合されます)。
 	Effect Gallery…	効果ギャラリー…
 	Effect Gallery Dialog	効果ギャラリーダイアログ
+	Arc Segment Tool Options	円弧セグメントツールオプション
+	Base Along:	基準方向:
+	Closed	閉じる
+	Concave	凹
+	Convex	凸
+	Fill Arc	円弧を塗りつぶす
+	Length X-Axis:	X 軸の長さ:
+	Length Y-Axis:	Y 軸の長さ:
+	Slope:	勾配:
+axis	X Axis	X 軸
+axis	Y Axis	Y 軸
+@msg	Packaged {n} file(s) in {folder}	{n} 個のファイルを {folder} にパッケージしました
+@msg	Packaged {n} file(s) {note}	{n} 個のファイルをパッケージしました {note}
+@msg	Packaged {n} file(s)	{n} 個のファイルをパッケージしました
+	Packaged {n} file(s)	{n} 個のファイルをパッケージしました
+	Packaged {n} file(s) in {folder}	{n} 個のファイルを {folder} にパッケージしました
+	Packaged {n} file(s) {note}	{n} 個のファイルをパッケージしました {note}
+	{count} file(s) in {folder}. Show the package folder?	{folder} に {count} 個のファイル。パッケージフォルダーを表示しますか？
+	Clockwise	時計回り
+	Dither	ディザ
+	Fine noise hides banding in the gradient fill	細かいノイズでグラデーションの塗りの縞を目立たなくします
+@msg	`dither` applies to gradient fills (stroke: false)	`dither` はグラデーションの塗りに適用されます (stroke: false)
+@msg	`dither` applies to gradient fills (paint.setFill)	`dither` はグラデーションの塗りに適用されます (paint.setFill)
+@msg	`dither` must be true or false	`dither` には true または false を指定してください
+	Perceptual	知覚的
+@msg	`method` must be classic or perceptual	`method` には classic または perceptual を指定してください
+# Heavy plug-in filters (plugin.inspect, plug-in runs)
+	Install “{name}”, which asks for a heavy budget?	大きな計算予算を求める「{name}」をインストールしますか？
+	Each run may take up to {minutes} minutes and do {times} times the work other plug-ins may. It runs in the background, and you can cancel it.	1 回の実行に最大 {minutes} 分かかり、ほかのプラグインに許される {times} 倍の処理を行うことがあります。バックグラウンドで実行され、キャンセルできます。
+	It may take minutes, so it runs in the background, where you can cancel it.	数分かかることがあるため、バックグラウンドで実行されます。実行中はキャンセルできます。
+	The plug-in is computing…	プラグインが計算中…
+	Inspect Plug-in	プラグインを検査
+	Cancel Plug-in Run	プラグインの実行をキャンセル
+@msg	{_1} finished, but the document or the plug-in changed meanwhile: run it again	{_1} は完了しましたが、その間にドキュメントまたはプラグインが変更されました。もう一度実行してください
+@msg	Running “{name}”…	「{name}」を実行中…
+@msg	a live effect runs while the document is drawn, so it can't be `heavy`	ライブ効果はドキュメントの描画中に実行されるため、`heavy` にはできません
+@msg	an exporter always gets an export's budget: leave `budget` out	書き出しプラグインには常に書き出しの予算が割り当てられます。`budget` は省略してください
+@msg	“{_1}” asks for a heavy budget (each run up to {minutes} minutes and {times} times the usual instructions): install it with `allowHeavy: true` once the user agrees	「{_1}」は大きな計算予算を求めています (1 回の実行につき最大 {minutes} 分、通常の {times} 倍の命令)。ユーザーが同意したら `allowHeavy: true` を指定してインストールしてください

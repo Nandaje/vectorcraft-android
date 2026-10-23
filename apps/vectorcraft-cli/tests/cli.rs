@@ -84,9 +84,123 @@ fn scale_sizes_raster_exports_only() {
 fn run_reports_errors() {
     let out = Command::new(BIN).args(["run", "--cmd", "nope.nothing"]).output().unwrap();
     assert!(!out.status.success());
-    assert!(String::from_utf8_lossy(&out.stderr).contains("nope.nothing"));
+    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
+    assert!(stderr.contains("step 0 (nope.nothing)"), "{stderr}");
     let out = Command::new(BIN).args(["run", "--params", "{}"]).output().unwrap();
     assert!(!out.status.success());
+}
+
+/// The JSON lines `run` printed.
+fn json_lines(stdout: &[u8]) -> Vec<Value> {
+    String::from_utf8_lossy(stdout).lines().map(|l| serde_json::from_str(l).unwrap()).collect()
+}
+
+/// #3147: `run --commands FILE` reads its steps from a JSON array (`command` or `id`), runs them
+/// where the option stands among `--cmd` and `--export`, and they count with those for `"$N"`; a
+/// placed file's `dataBase64` longer than a Windows command line holds fits.
+#[test]
+fn run_reads_steps_from_a_commands_file() {
+    let steps = tmp("steps.json");
+    let svg = tmp("steps.svg");
+    // Base64 of an SVG well past 32,767 characters, the most a Windows command line holds.
+    let padding = "x".repeat(40_000);
+    let placed = format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20"><!-- {padding} --><rect width="40" height="20" fill="#118833"/></svg>"##
+    );
+    let data = vectorcraft_format::base64_encode(placed.as_bytes());
+    assert!(data.len() > 32_767);
+    let file = json!([
+        {"command": "shape.rectangle", "params": {"x": 10, "y": 10, "width": 50, "height": 30}},
+        {"command": "file.place", "params": {"name": "code.svg", "dataBase64": data}},
+        {"id": "object.setProps", "params": {"id": "$2.ids.0", "name": "barcode"}},
+    ]);
+    std::fs::write(&steps, serde_json::to_string_pretty(&file).unwrap()).unwrap();
+    let out = Command::new(BIN)
+        .args(["run", "--cmd", "file.new", "--params", r#"{"width":200,"height":100}"#, "--commands", steps.to_str().unwrap()])
+        .args(["--cmd", "document.node", "--params", r#"{"id":"$2.ids.0"}"#, "--export", svg.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let lines = json_lines(&out.stdout);
+    let ran: Vec<&str> = lines.iter().map(|l| l["command"].as_str().unwrap_or("export")).collect();
+    assert_eq!(ran, ["file.new", "shape.rectangle", "file.place", "object.setProps", "document.node", "export"]);
+    // `$2` in the file and in the `--cmd` after it is the placed art.
+    assert_eq!(lines[4]["result"]["name"], "barcode", "{}", lines[4]);
+    let written = std::fs::read_to_string(&svg).unwrap();
+    assert!(written.contains("118833") && written.contains("barcode"), "{written}");
+}
+
+/// `run --commands -` reads JSON Lines from standard input: a byte order mark, blank lines and
+/// CRLF line ends are fine, and the first step may be `file.new`.
+#[test]
+fn run_reads_json_lines_from_standard_input() {
+    let svg = tmp("stdin.svg");
+    let mut child = Command::new(BIN)
+        .args(["run", "--commands", "-", "--export", svg.to_str().unwrap()])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let text = "\u{feff}{\"command\":\"file.new\",\"params\":{\"width\":120,\"height\":80}}\n\n{\"command\":\"shape.ellipse\",\"params\":{\"x\":10,\"y\":10,\"width\":40,\"height\":30}}\r\n{\"id\":\"paint.setFill\",\"params\":{\"color\":\"#3366ff\"}}\n";
+    child.stdin.take().unwrap().write_all(text.as_bytes()).unwrap();
+    let out = child.wait_with_output().unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let lines = json_lines(&out.stdout);
+    assert_eq!(lines.len(), 4);
+    assert_eq!(lines[0]["command"], "file.new");
+    assert!(std::fs::read_to_string(&svg).unwrap().contains("3366ff"));
+}
+
+/// Malformed `--commands` input stops the run before any step runs, naming the step (counted from
+/// 0 with the `--cmd` before it) and the entry or line; input past the size and step limits is
+/// refused; a step that fails names its number.
+#[test]
+fn run_refuses_malformed_commands_naming_the_step() {
+    let fails = |args: &[&str]| {
+        let out = Command::new(BIN).args(args).stdin(Stdio::null()).output().unwrap();
+        assert!(!out.status.success(), "{args:?}");
+        (String::from_utf8_lossy(&out.stderr).to_string(), json_lines(&out.stdout).len())
+    };
+    let bad = |name: &str, text: &[u8], wanted: &[&str]| {
+        let path = tmp(name);
+        std::fs::write(&path, text).unwrap();
+        let (e, printed) = fails(&["run", "--cmd", "file.new", "--commands", path.to_str().unwrap()]);
+        assert!(wanted.iter().all(|w| e.contains(w)), "{name}: {e}");
+        assert_eq!(printed, 0, "{name}: nothing runs");
+    };
+    bad("number.json", b"[1]", &["step 1 (entry 1)", "must be an object"]);
+    bad("both.json", br#"[{"command":"select.all"},{"command":"select.all","id":"select.none"}]"#, &["step 2 (entry 2)", "not both"]);
+    bad("no-command.json", br#"[{"params":{}}]"#, &["step 1 (entry 1)", "no `command`"]);
+    bad("id-number.json", br#"[{"command":3}]"#, &["`command` must be a string"]);
+    bad("params-array.json", br#"[{"command":"select.all","params":[1]}]"#, &["`params` of select.all must be a JSON object"]);
+    bad("typo.json", br#"[{"command":"select.all","param":{}}]"#, &["unknown key `param`"]);
+    bad("broken.json", b"[{\"command\":", &["--commands", "broken.json"]);
+    bad("lines.jsonl", b"{\"command\":\"select.all\"}\n\n{oops}\n", &["step 2 (line 3)"]);
+    bad("line-array.jsonl", b"{\"command\":\"select.all\"}\n[1]\n", &["step 2 (line 2)"]);
+    bad("latin1.json", b"[{\"command\":\"select.all\",\"params\":{\"name\":\"\xe9\"}}]", &["not UTF-8"]);
+    let many = "{\"command\":\"select.all\"}\n".repeat(100_001);
+    bad("many.jsonl", many.as_bytes(), &["more than 100000 steps"]);
+    // Past 64 MiB (a sparse file: nothing is written).
+    let huge = tmp("huge.json");
+    std::fs::File::create(&huge).unwrap().set_len(64 * 1024 * 1024 + 1).unwrap();
+    let (e, _) = fails(&["run", "--commands", huge.to_str().unwrap()]);
+    assert!(e.contains("more than 64 MiB"), "{e}");
+    let (e, _) = fails(&["run", "--commands", tmp("missing.json").to_str().unwrap()]);
+    assert!(e.contains("missing.json"), "{e}");
+    // `--params` sets the `--cmd` just before it, never a step of the file.
+    let ok = tmp("ok.json");
+    std::fs::write(&ok, br#"[{"command":"select.all"}]"#).unwrap();
+    let (e, _) = fails(&["run", "--cmd", "select.all", "--commands", ok.to_str().unwrap(), "--params", "{}"]);
+    assert!(e.contains("--params must follow a --cmd"), "{e}");
+    let (e, _) = fails(&["run", "--commands", "-", "--commands", "-"]);
+    assert!(e.contains("standard input is read once"), "{e}");
+    // A step that fails is named by its number, after the steps before it ran.
+    let failing = tmp("failing.json");
+    std::fs::write(&failing, br#"[{"command":"select.all"},{"command":"nope.nothing"}]"#).unwrap();
+    let (e, printed) = fails(&["run", "--cmd", "file.new", "--commands", failing.to_str().unwrap()]);
+    assert!(e.contains("step 2 (nope.nothing)"), "{e}");
+    assert_eq!(printed, 2);
 }
 
 #[test]
@@ -130,6 +244,58 @@ fn mcp_automation_roots_in_a_folder_an_earlier_run_left() {
     automation_roots(&empty_dir(dir).join("roots"));
 }
 
+/// #3546: each root flag may be given more than once: a path inside any of the read roots opens,
+/// one inside any of the write roots is written, and everything else, a write root's sibling read
+/// root included, is refused.
+#[test]
+fn mcp_automation_roots_take_several_folders() {
+    let base = tmp("several-roots");
+    for d in ["in", "in2", "out", "out2", "outside"] {
+        std::fs::create_dir_all(base.join(d)).unwrap();
+    }
+    let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30"><rect width="20" height="10"/></svg>"#;
+    for f in ["in/a.svg", "in2/b.svg", "outside/c.svg"] {
+        std::fs::write(base.join(f), svg).unwrap();
+    }
+    let dir = |d: &str| base.join(d).to_string_lossy().into_owned();
+    let file = |d: &str, f: &str| base.join(d).join(f).to_string_lossy().into_owned();
+    let mut child = Command::new(BIN)
+        .args(["mcp", "--automation-read-root", &dir("in"), &format!("--automation-read-root={}", dir("in2"))])
+        .args(["--automation-write-root", &dir("out"), "--automation-write-root", &dir("out2")])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let call = |id: u64, name: &str, args: Value| json!({"jsonrpc":"2.0","id":id,"method":"tools/call","params":{"name":name,"arguments":args}});
+    let calls = [
+        (call(1, "open_file", json!({"path": file("in", "a.svg")})), false),
+        (call(2, "open_file", json!({"path": file("in2", "b.svg")})), false),
+        (call(3, "open_file", json!({"path": file("outside", "c.svg")})), true),
+        (call(4, "export", json!({"path": file("out", "a.png")})), false),
+        (call(5, "export", json!({"path": file("out2", "b.png")})), false),
+        (call(6, "export", json!({"path": file("outside", "c.png")})), true),
+        (call(7, "export", json!({"path": file("in2", "d.png")})), true),
+        (call(8, "open_file", json!({"path": file("out2", "b.png")})), true),
+    ];
+    {
+        let mut stdin = child.stdin.take().unwrap();
+        for (m, _) in &calls {
+            writeln!(stdin, "{m}").unwrap();
+        }
+    }
+    let out = child.wait_with_output().unwrap();
+    assert!(out.status.success());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("files confined: read ") && stderr.contains("; write "), "{stderr}");
+    let replies: Vec<Value> = String::from_utf8(out.stdout).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+    let errors: Vec<bool> = replies.iter().map(|r| r["result"]["isError"] == true).collect();
+    assert_eq!(errors, calls.iter().map(|(_, e)| *e).collect::<Vec<_>>(), "{replies:?}");
+    assert!(replies[2]["result"]["content"][0]["text"].as_str().unwrap().contains("outside the read roots"), "{}", replies[2]);
+    assert!(base.join("out/a.png").is_file() && base.join("out2/b.png").is_file());
+    assert!(!base.join("outside/c.png").exists() && !base.join("in2/d.png").exists());
+}
+
 fn automation_roots(base: &std::path::Path) {
     for d in ["in", "out", "outside"] {
         std::fs::create_dir_all(base.join(d)).unwrap();
@@ -153,7 +319,7 @@ fn automation_roots(base: &std::path::Path) {
         assert!(!out.status.success() && err.contains(why), "{args:?}: {err}");
     };
     fails(&["mcp", "--automation-read-root", &dir("missing")], "cannot open the automation read root");
-    fails(&["mcp", "--automation-read-root", &dir("in"), "--automation-read-root", &dir("out")], "given twice");
+    fails(&["mcp", "--automation-read-root", &dir("in"), "--automation-read-root", &dir("missing")], "cannot open the automation read root");
     fails(&["mcp", "--automation-write-root"], "needs a folder");
     fails(&["mcp", "--connect", "127.0.0.1:1", &format!("--automation-write-root={}", dir("out"))], "a running app enforces its own roots");
 

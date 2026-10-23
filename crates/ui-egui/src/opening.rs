@@ -29,9 +29,12 @@ pub struct Opening {
 }
 
 /// Is a long operation running that should show the busy cursor and status spinner (background
-/// save/export with a label, or a file opening off the UI thread)?
+/// save/export with a label, a file opening or being read for Place off the UI thread, or a heavy plug-in filter)?
 pub fn long_operation_busy(app: &VectorcraftApp) -> bool {
-    app.background.jobs.iter().any(|j| !j.label.is_empty() && !j.cancelled()) || !app.opening.pending.is_empty()
+    app.background.jobs.iter().any(|j| !j.label.is_empty() && !j.cancelled())
+        || !app.opening.pending.is_empty()
+        || !app.plugin_runs.running.is_empty()
+        || !app.placing.pending.is_empty()
 }
 
 /// Does opening happen off the UI thread here? Not on wasm (no threads), in unit tests (they look
@@ -49,13 +52,14 @@ pub fn start(app: &mut VectorcraftApp, path: &str, bytes: Vec<u8>) -> Result<Val
     let (name, file) = (path.to_string(), bytes.clone());
     // Update Links (Preferences › File Handling) applies there as it is set now.
     let update_links = app.session.prefs.update_links == "automatically";
+    let low_res_proxy_eps = app.session.prefs.low_res_proxy_eps;
     // The automation roots in force here are in force there.
     let scope = ScopeHandle::capture();
     let spawned = std::thread::Builder::new().name("vectorcraft-open".into()).spawn(move || {
         let r = scope
             .run(|| {
                 vectorcraft_engine::guard::catch_panic(|| {
-                    fileio::read_for_open(&name, &file, Some(name.clone()), &Value::Null, update_links).map_err(|e| e.to_string())
+                    fileio::read_for_open(&name, &file, Some(name.clone()), &Value::Null, update_links, low_res_proxy_eps).map_err(|e| e.to_string())
                 })
             })
             .unwrap_or_else(|msg| Err(format!("internal error: {msg} (please report this bug)")));
@@ -77,9 +81,11 @@ pub fn start(app: &mut VectorcraftApp, path: &str, bytes: Vec<u8>) -> Result<Val
 /// Open the files that are ready (each frame). Not while a dialog is open: a document that opens
 /// becomes the active one, and the dialog's OK acts on the active document (#1694: Save As
 /// options confirmed after another file had finished opening saved that file's art under the
-/// first one's name). The files wait, their status line too, until the dialog is closed.
+/// first one's name). The files wait, their status line too, until the dialog is closed. Nor while
+/// a drag (a tool's interaction, or a tool busy with a drag of its own) is under way: a document
+/// that opens cancels it.
 pub fn poll(app: &mut VectorcraftApp) {
-    if app.ui.dialog.is_some() {
+    if app.ui.dialog.is_some() || app.session.in_interaction() || app.session.tool_busy() {
         return;
     }
     let mut i = 0;
@@ -181,6 +187,70 @@ mod tests {
         }
         assert_eq!(app.session.documents().len(), before + 1);
         assert_eq!(app.session.doc().unwrap().path.as_deref(), Some("/art/Second.vectorcraft"));
+    }
+
+    /// A file that finishes opening while an object is being dragged waits for the drag to end, so
+    /// the drag is not canceled.
+    #[test]
+    fn a_file_ready_during_a_drag_waits_for_it_to_end() {
+        use vectorcraft_tools::{PointerEvent, PointerKind};
+        let mut app = VectorcraftApp::new(Session::new(), Services::default());
+        app.run("file.new", json!({"width": 400, "height": 300})).unwrap();
+        let square = app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 20, "height": 20})).unwrap()["id"].as_u64().unwrap();
+        app.select_tool("selection");
+        let view = vectorcraft_engine::ViewInfo::default();
+        for (kind, x) in [(PointerKind::Down, 20.0), (PointerKind::Drag, 40.0), (PointerKind::Drag, 60.0)] {
+            app.session.pointer(&PointerEvent::new(kind, x, 20.0), view).unwrap();
+        }
+        start(&mut app, "/art/Second.vectorcraft", vectorcraft_format::save(&vectorcraft_doc::Document::new(120.0, 80.0), false)).unwrap();
+        let t0 = std::time::Instant::now();
+        while t0.elapsed().as_millis() < 400 {
+            poll(&mut app);
+            std::thread::yield_now();
+        }
+        assert!(app.session.documents().len() == 1 && app.session.in_interaction(), "the file waits for the drag");
+        app.session.pointer(&PointerEvent::new(PointerKind::Up, 60.0, 20.0), view).unwrap();
+        let t0 = std::time::Instant::now();
+        while !app.opening.pending.is_empty() && t0.elapsed().as_secs() < 30 {
+            poll(&mut app);
+            std::thread::yield_now();
+        }
+        assert_eq!(app.session.documents().len(), 2);
+        let moved = app.session.documents()[0].doc.node(vectorcraft_doc::NodeId(square)).and_then(|n| n.geometric_bounds());
+        assert_eq!(moved.map(|b| (b.x0, b.y0)), Some((50.0, 10.0)), "the drag was not canceled");
+    }
+
+    /// A file that finishes opening while the place cursor is being dragged, a drag the tool keeps
+    /// to itself, waits for the drag to end: the drag still places its file.
+    #[test]
+    fn a_file_ready_during_a_place_cursor_drag_waits_for_it_to_end() {
+        use vectorcraft_tools::{PointerEvent, PointerKind};
+        let mut app = VectorcraftApp::new(Session::new(), Services::default());
+        app.run("file.new", json!({"width": 400, "height": 300})).unwrap();
+        let mut png = vec![];
+        image::RgbImage::new(8, 8).write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).unwrap();
+        app.run("file.place.queue", json!({"files": [{"name": "a.png", "dataBase64": vectorcraft_format::base64_encode(&png)}]})).unwrap();
+        let view = vectorcraft_engine::ViewInfo::default();
+        for (kind, x) in [(PointerKind::Down, 20.0), (PointerKind::Drag, 60.0)] {
+            crate::canvas::dispatch(&mut app, &PointerEvent::new(kind, x, 20.0), view);
+        }
+        start(&mut app, "/art/Second.vectorcraft", vectorcraft_format::save(&vectorcraft_doc::Document::new(120.0, 80.0), false)).unwrap();
+        let t0 = std::time::Instant::now();
+        while t0.elapsed().as_millis() < 400 {
+            poll(&mut app);
+            std::thread::yield_now();
+        }
+        assert!(app.session.documents().len() == 1 && app.session.tool_busy(), "the file waits for the drag");
+        crate::canvas::dispatch(&mut app, &PointerEvent::new(PointerKind::Up, 60.0, 20.0), view);
+        let t0 = std::time::Instant::now();
+        while !app.opening.pending.is_empty() && t0.elapsed().as_secs() < 30 {
+            poll(&mut app);
+            std::thread::yield_now();
+        }
+        assert_eq!(app.session.documents().len(), 2);
+        let first = &app.session.documents()[0].doc;
+        let names: Vec<_> = first.layers.iter().flat_map(|l| l.children().into_iter().flatten()).filter_map(|n| n.name.clone()).collect();
+        assert_eq!(names, ["a.png"], "the drag placed its file");
     }
 
     #[test]

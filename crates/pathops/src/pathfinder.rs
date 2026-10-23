@@ -937,9 +937,11 @@ mod tests {
     #[test]
     fn divide_open_paths_retains_the_existing_segment_cap() {
         let mut inputs = vec![Shape::new(rect(0.0, 0.0, 100.0, 100.0), FillRule::NonZero, 7)];
-        inputs.extend((0..4093).map(|_| Shape::new(shapes::line(Point::new(-10.0, 50.0), Point::new(110.0, 50.0)), FillRule::NonZero, 99)));
+        // The square's four sides and one line past the cap.
+        let n = crate::SHAPE_BUILDER_MAX_SEGMENTS - 3;
+        inputs.extend((0..n).map(|_| Shape::new(shapes::line(Point::new(-10.0, 50.0), Point::new(110.0, 50.0)), FillRule::NonZero, 99)));
         let faces = pathfinder(PathfinderOp::Divide, &inputs);
-        assert_eq!(faces.len(), 1, "4097 segments fall back to filled areas");
+        assert_eq!(faces.len(), 1, "a segment past the cap falls back to filled areas");
         assert_eq!(faces[0].key, 7);
         assert!((crate::area(&faces[0].path, faces[0].rule) - 10000.0).abs() < 1e-6);
     }

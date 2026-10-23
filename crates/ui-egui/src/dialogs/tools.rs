@@ -20,6 +20,42 @@ pub fn open_tool_dialog(app: &mut VectorcraftApp, kind: &str, p: Value) {
             Dialog::new(kind, json!({"x": x, "y": y, "radius1": "50 pt", "radius2": "25 pt", "points": app.session.tool_options_of(kind)["points"]}))
         }
         "lineSegment" => Dialog::new(kind, json!({"x": x, "y": y, "length": "100 pt", "angle": 0})),
+        "spiral" => {
+            let options = app.session.tool_options_of(kind);
+            Dialog::new(
+                kind,
+                json!({
+                    "x": x,
+                    "y": y,
+                    "radius": "50 pt",
+                    "decay": options.get("decay").cloned().unwrap_or(json!(80.0)),
+                    "segments": options.get("segments").cloned().unwrap_or(json!(10)),
+                    "clockwise": options.get("clockwise").cloned().unwrap_or(json!(true)),
+                }),
+            )
+        }
+        "arc" => {
+            let opts = app.session.tool_options_of(kind);
+            let closed = opts.get("closed").and_then(Value::as_bool).unwrap_or(false);
+            let mut d = Dialog::new(
+                kind,
+                json!({
+                    "__anchorX": x,
+                    "__anchorY": y,
+                    "x": x,
+                    "y": y,
+                    "lengthX": opts.get("lengthX").cloned().unwrap_or(json!("100 pt")),
+                    "lengthY": opts.get("lengthY").cloned().unwrap_or(json!("100 pt")),
+                    "reference": opts.get("reference").cloned().unwrap_or(json!(0)),
+                    "arcType": if closed { "closed" } else { "open" },
+                    "baseAlong": opts.get("baseAlong").cloned().unwrap_or(json!("x")),
+                    "slope": opts.get("slope").cloned().unwrap_or(json!(50)),
+                    "fillArc": opts.get("fillArc").and_then(Value::as_bool).unwrap_or(false),
+                }),
+            );
+            super::shapes::arc_pin_to_anchor(&mut d);
+            d
+        }
         // The grids: the tool's stored options (divider counts and skews, switches) at the default size.
         "rectangularGrid" | "polarGrid" => {
             let mut obj = match app.session.tool_options_of(kind) {

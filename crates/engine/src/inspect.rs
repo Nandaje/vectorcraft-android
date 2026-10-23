@@ -128,15 +128,18 @@ pub fn document(s: &Session) -> Value {
     document_opts(s, SummaryOpts::default())
 }
 
-/// An artboard's name and rectangle, its background color (`#rrggbb`) when it has one, and
-/// `locked: true` when it is locked.
+/// An artboard's name and rectangle, its background color (`#rrggbb`) when it has one,
+/// `locked: true` when it is locked, and `showCenterMark: true` and `showCrossHairs: true` when
+/// it shows them.
 fn artboard_summary(a: &vectorcraft_doc::Artboard) -> Value {
     let mut v = json!({"name": a.name, "x": a.rect.x0, "y": a.rect.y0, "width": a.rect.width(), "height": a.rect.height()});
     if let Some(c) = a.color {
         v["color"] = json!(c.to_hex());
     }
-    if a.locked {
-        v["locked"] = json!(true);
+    for (key, on) in [("locked", a.locked), ("showCenterMark", a.show_center_mark), ("showCrossHairs", a.show_cross_hairs)] {
+        if on {
+            v[key] = json!(true);
+        }
     }
     v
 }

@@ -215,6 +215,35 @@ pub fn anchor_buttons(app: &mut VectorcraftApp, ui: &mut Ui, controls: AnchorCon
 /// The id of the Control bar's isolation button.
 const ISOLATION_BUTTON: &str = "cb-isolation";
 
+/// The room the Control bar needs for the Snapping menu next to the Artboard tool's controls; with
+/// less, the menu is left out so those controls still fit the narrowest window.
+const ARTBOARD_SNAPPING_WIDTH: f32 = 900.0;
+
+/// The Control bar's snapping quick access; every change uses its existing command.
+fn snapping_menu(app: &mut VectorcraftApp, ui: &mut Ui) {
+    ui.menu_button(tl!("Snapping"), |ui| {
+        for (label, cmd, on) in [
+            (tl!("Smart Guides"), "view.smartGuides", app.ui.view.smart_guides),
+            (tl!("Snap to Point"), "view.snapToPoint", app.ui.view.snap_to_point),
+            (tl!("Snap to Grid"), "view.snapToGrid", app.ui.view.snap_to_grid),
+            (tl!("Snap to Pixel"), "view.snapToPixel", app.ui.view.snap_to_pixel),
+        ] {
+            if widgets::check(ui, label, on, true) {
+                crate::menus::invoke(app, cmd, json!({}));
+            }
+        }
+        ui.separator();
+        for (key, label, on) in [
+            ("snapTangent", tl!("Snap to Tangent"), app.session.prefs.snap_tangent),
+            ("snapPerpendicular", tl!("Snap to Perpendicular"), app.session.prefs.snap_perpendicular),
+        ] {
+            if widgets::check(ui, label, on, true) {
+                crate::menus::invoke(app, "prefs.set", json!({"key": key, "value": !on}));
+            }
+        }
+    });
+}
+
 /// The Control bar's isolation button. In isolation mode it is Exit Isolation Mode, except while a
 /// pattern is edited (the isolation bar's Done and Cancel end that). Otherwise, with one object
 /// selected that [`vectorcraft_tools::select::isolates`], it is Isolate Selected Object, which
@@ -258,10 +287,15 @@ pub fn control_bar(app: &mut VectorcraftApp, ui: &mut Ui) {
                 for i in 0..5 {
                     ui.painter().circle_filled(g.center_top() + vec2(0.0, 2.0 + i as f32 * 4.0), 0.9, t.text_disabled);
                 }
-                let Some(st) = app.session.active() else {
+                if app.session.active().is_none() {
                     ui.label(egui::RichText::new(tl!("No Document")).color(t.text_dim));
                     return;
-                };
+                }
+                // The Artboard tool's controls fill the narrowest window, so they keep it to themselves there.
+                if app.session.tool_id() != "artboard" || ui.available_width() >= ARTBOARD_SNAPPING_WIDTH {
+                    snapping_menu(app, ui);
+                }
+                let Some(st) = app.session.active() else { return };
                 let sel = st.selection.objects.clone();
                 let units = app.session.general_unit();
                 let first = sel.first().and_then(|id| st.doc.node(*id)).cloned();
@@ -834,6 +868,7 @@ fn status_readouts(app: &VectorcraftApp, ui: &mut Ui, t: &Tokens) {
         .filter(|j| !j.label.is_empty() && !j.cancelled())
         .map(|j| j.label.as_str())
         .chain(app.opening.pending.iter().map(|p| p.label.as_str()))
+        .chain(app.placing.pending.iter().map(|p| p.label.as_str()))
         .collect();
     // Reserve the spinner's space while idle too: starting a background job changes the text,
     // not its origin. Messages take priority over optional readouts in a narrow window.

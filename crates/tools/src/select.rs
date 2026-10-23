@@ -27,13 +27,13 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use serde_json::{Value, json};
-use vectorcraft_doc::hit::{hit_test, marquee, objects_at};
+use vectorcraft_doc::hit::{Hit, HitKind, hit_test, marquee, objects_at};
 use vectorcraft_doc::{NodeId, OrientedBox};
 use vectorcraft_geom::{Affine, Point, Rect, Vec2};
 
 use crate::bbox::{Handle, hit_handle, in_rotate_zone, move_delta, rotate_for_drag, scale_for_drag};
 use crate::corners::{self, CornerDrag, over_widget};
-use crate::guides::{PointSnap, Targets};
+use crate::guides::{PointSnap, Targets, hold_on_path};
 use crate::pathtype::{self, BracketDrag, over_bracket};
 use crate::pie::{self, PieDrag};
 use crate::rulerguide::GuideEdit;
@@ -48,6 +48,9 @@ enum State {
     /// Pressed on an object; becomes Moving after the drag threshold.
     Moving {
         start: Point,
+        /// The point that snaps, moving with the pointer: `start`, or where a press on a path's
+        /// stroke or beside its edge took hold of the path ([`hold_point`]).
+        hold: Point,
         began: bool,
         /// Shift-pressed on this selected object: released without a drag, it leaves the
         /// selection.
@@ -397,6 +400,14 @@ pub(crate) fn bbox_handle_at(cx: &ToolContext, p: Point) -> bool {
 /// to label it while hovering.
 const HOVER_REACH: f64 = 6.0;
 
+/// Where a press at `p` holds the object it hit (`h`) for a move: the nearest point of the path
+/// hit, when the press is on its stroke or outline or within [`HOVER_REACH`] of it, else `p`
+/// ([`hold_on_path`]). That point snaps, so the path itself lands on a ruler guide (#3701).
+pub(crate) fn hold_point(cx: &ToolContext, h: &Hit, p: Point) -> Point {
+    let reach = if matches!(h.kind, HitKind::Stroke | HitKind::Outline) { f64::INFINITY } else { cx.tol(HOVER_REACH) };
+    cx.doc.node(h.leaf).and_then(|n| n.path_data()).and_then(|pd| hold_on_path(pd, p, reach)).unwrap_or(p)
+}
+
 impl SelectionTool {
     fn drag_threshold(cx: &ToolContext) -> f64 {
         cx.tol(3.0)
@@ -560,7 +571,8 @@ impl Tool for SelectionTool {
         let m = ev.mods;
         // A press near a centre or an anchor grabs the object by it.
         self.hover = None;
-        let grab = if matches!(ev.kind, PointerKind::Down) { Self::hover_point(cx, p).map_or(p, |(q, _)| q) } else { p };
+        let grabbed = if matches!(ev.kind, PointerKind::Down) { Self::hover_point(cx, p).map(|(q, _)| q) } else { None };
+        let grab = grabbed.unwrap_or(p);
         if matches!(ev.kind, PointerKind::Move) && matches!(self.state, State::Idle) {
             self.hover = Self::hover_point(cx, p);
         }
@@ -658,7 +670,7 @@ impl Tool for SelectionTool {
                     && cx.select_behind
                     && let Some(behind) = object_behind(cx, p)
                 {
-                    self.state = State::Moving { start: p, began: false, deselect: None, key: None };
+                    self.state = State::Moving { start: p, hold: p, began: false, deselect: None, key: None };
                     return vec![Action::Exec("select.set".into(), json!({ "ids": [behind.0] }))];
                 }
                 match hit_test(cx.doc, p, cx.selection_hit_options()) {
@@ -679,7 +691,10 @@ impl Tool for SelectionTool {
                         } else if (cx.selection.objects.len() > 1 || !cx.selection.guides.is_empty()) && !m.cmd && !m.alt {
                             key = Some(top);
                         }
-                        self.state = State::Moving { start: grab, began: false, deselect, key };
+                        // Grabbed by no anchor or centre, a press on a path's stroke or beside its
+                        // edge holds the path there, and that point of it snaps (#3701).
+                        let hold = if grabbed.is_some() { grab } else { hold_point(cx, &h, p) };
+                        self.state = State::Moving { start: grab, hold, began: false, deselect, key };
                         out
                     }
                     None => {
@@ -688,7 +703,7 @@ impl Tool for SelectionTool {
                     }
                 }
             }
-            (PointerKind::Drag, State::Moving { start, began, .. }) => {
+            (PointerKind::Drag, State::Moving { start, hold, began, .. }) => {
                 let mut out = vec![];
                 if !began {
                     if p.distance(start) < Self::drag_threshold(cx) {
@@ -697,14 +712,14 @@ impl Tool for SelectionTool {
                     out.push(Action::Begin(if m.alt { "Copy".into() } else { "Move".into() }));
                     self.moving = Some(MoveSnap::new(cx));
                 }
-                let mut d = move_delta(start, p, m.shift);
+                let mut d = move_delta(start, p, m.shift, cx.constrain_angle);
                 let unsnapped = d;
                 if let Some(snap) = &self.moving {
-                    (d, self.guides) = if m.shift { snap.snap_along(cx, start, d, m.alt) } else { snap.snap(cx, start, d, m.alt) };
+                    (d, self.guides) = if m.shift { snap.snap_along(cx, hold, d, m.alt) } else { snap.snap(cx, hold, d, m.alt) };
                 }
                 // Shift has already constrained `d`: any change is a snap.
                 self.snapped = (d - unsnapped).hypot() > 1e-9;
-                self.state = State::Moving { start, began: true, deselect: None, key: None };
+                self.state = State::Moving { start, hold, began: true, deselect: None, key: None };
                 self.measure = cx.measurement_labels.then(|| (p, cx.offset_label(d.x, d.y)));
                 out.push(Action::Preview("object.transform".into(), json!({ "matrix": matrix_json(Affine::translate(d)), "copy": m.alt })));
                 out

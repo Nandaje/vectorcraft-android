@@ -26,7 +26,7 @@ const ROWS: &[Row] = &[
     (SYMBOLISM, Some("symbolism"), &["diameter", "intensity", "density"]),
     (&["mirrorCut"], None, &["axis", "keep"]),
     (&["puppetWarp"], None, &["showMesh", "expand"]),
-    (&["arc"], None, &["closed"]),
+    (&["arc"], None, &["closed", "lengthX", "lengthY", "reference", "baseAlong", "slope", "fillArc"]),
     (&["spiral"], None, &["decay", "segments", "clockwise"]),
     (&["rectangularGrid"], None, &["rows", "columns", "rowSkew", "columnSkew", "frame", "fill"]),
     (&["polarGrid"], None, &["concentric", "radial", "concentricSkew", "radialSkew", "compound", "fill"]),
@@ -45,7 +45,18 @@ const ROWS: &[Row] = &[
     (
         &["shapeBuilder"],
         None,
-        &["openFilledAsClosed", "pickColorFrom", "cursorSwatchPreview", "selection", "highlightFill", "gapDetection", "gapLength"],
+        &[
+            "openFilledAsClosed",
+            "pickColorFrom",
+            "cursorSwatchPreview",
+            "selection",
+            "highlightFill",
+            "gapDetection",
+            "gapLength",
+            "clickStrokeSplitsPath",
+            "highlightStroke",
+            "highlightColor",
+        ],
     ),
     (&["artboard"], None, &["moveArt", "scaleArt"]),
     // Flare Tool Options (`extra::FLARE_OPTIONS` and the Rays and Rings checkboxes).

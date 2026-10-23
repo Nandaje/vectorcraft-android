@@ -179,8 +179,8 @@ pub fn show(app: &mut VectorcraftApp, ui: &mut Ui) {
         widgets::dim_label(ui, tl!("Limit:"));
         let lim = st.as_ref().map(|s| s.miter_limit).unwrap_or(10.0);
         if !matches!(join, Some(LineJoin::Round | LineJoin::Bevel)) {
-            if let Some(v) = widgets::mixed_field(ui, "stroke-limit", (!mixed.miter_limit).then_some(lim), " x", 0, 50.0) {
-                set(app, json!({"miterLimit": v.clamp(1.0, 500.0)}));
+            if let Some(v) = widgets::range_field(ui, "stroke-limit", (!mixed.miter_limit).then_some(lim), 1.0..=500.0, " x", 0, 50.0) {
+                set(app, json!({"miterLimit": v}));
             }
         } else {
             ui.label(egui::RichText::new(format!("{lim:.0} x")).color(t.text_disabled));
@@ -591,5 +591,62 @@ mod tests {
         // The panel shows the selected characters' stroke.
         assert_eq!(current_stroke(&app).map(|s| (s.join, s.width)), Some((LineJoin::Round, 4.0)));
         frame(&mut app);
+    }
+
+    /// #3370: the wheel over the focused Weight field stops at 0 and over the focused Limit field
+    /// at 1, in the field and in the document; it went on to -3 pt and 0 x.
+    #[test]
+    fn the_wheel_stops_weight_at_zero_and_limit_at_one() {
+        use egui::{Event, Modifiers, MouseWheelUnit, PointerButton, Pos2};
+        use vectorcraft_engine::Session;
+        let mut app = VectorcraftApp::new(Session::new(), Default::default());
+        app.run("file.new", json!({"width": 400, "height": 300})).unwrap();
+        app.run("shape.rectangle", json!({"x": 10, "y": 10, "width": 100, "height": 80})).unwrap();
+        app.run("stroke.set", json!({"weight": 1, "join": "miter", "miterLimit": 2})).unwrap();
+        let ctx = egui::Context::default();
+        crate::theme::install_fonts(&ctx);
+        let mut time = 0.0;
+        // One frame of the panel → the texts painted, with their rects.
+        let mut frame = |app: &mut VectorcraftApp, events: Vec<Event>| {
+            time += 0.05;
+            let screen_rect = Some(Rect::from_min_size(Pos2::ZERO, vec2(300.0, 600.0)));
+            let raw = egui::RawInput { events, time: Some(time), screen_rect, focused: true, ..Default::default() };
+            let mut out = ctx.run_ui(raw, |ui| show(app, ui));
+            out.textures_delta.clear();
+            out.shapes
+                .into_iter()
+                .filter_map(|s| match s.shape {
+                    egui::Shape::Text(t) => Some((t.galley.text().to_string(), Rect::from_min_size(t.pos, t.galley.size()))),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        // The weight and the limit.
+        let stroke = |app: &VectorcraftApp| current_stroke(app).map(|s| [s.width, s.miter_limit]).unwrap();
+        for (shown, after, which, low) in [("1 pt", "0 pt", 0, 0.0), ("2 x", "1 x", 1, 1.0)] {
+            let texts = frame(&mut app, vec![]);
+            let at = texts.iter().find(|(t, _)| t == shown).map(|(_, r)| r.center()).unwrap_or_else(|| panic!("no {shown:?} in {texts:?}"));
+            let button = |pressed| Event::PointerButton { pos: at, button: PointerButton::Primary, pressed, modifiers: Modifiers::NONE };
+            frame(&mut app, vec![Event::PointerMoved(at), button(true)]);
+            frame(&mut app, vec![button(false)]);
+            frame(&mut app, vec![]);
+            for _ in 0..4 {
+                let notch = Event::MouseWheel {
+                    unit: MouseWheelUnit::Line,
+                    delta: vec2(0.0, -1.0),
+                    phase: egui::TouchPhase::Move,
+                    modifiers: Modifiers::NONE,
+                };
+                frame(&mut app, vec![Event::PointerMoved(at), notch]);
+            }
+            let texts = frame(&mut app, vec![]);
+            assert_eq!(stroke(&app)[which], low, "{shown}: {:?}", stroke(&app));
+            assert!(texts.iter().any(|(t, _)| t == after), "{shown} → {after}: {texts:?}");
+            // At the bound, a step down and a step up in one frame end one step above it.
+            let key = |key| Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: Modifiers::NONE };
+            frame(&mut app, vec![key(egui::Key::ArrowDown), key(egui::Key::ArrowUp)]);
+            let texts = frame(&mut app, vec![]);
+            assert!(texts.iter().any(|(t, _)| t == shown), "{after}, down and up → {shown}: {texts:?}");
+        }
     }
 }

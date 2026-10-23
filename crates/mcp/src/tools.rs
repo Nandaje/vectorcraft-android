@@ -528,20 +528,19 @@ fn paint_params(v: &Value) -> Result<Value, String> {
     })
 }
 
-fn apply_paint(b: &mut dyn Backend, a: &Args, ids: Option<Value>) -> Result<Value, String> {
-    let with_ids = |mut p: Value| {
-        if let Some(ids) = &ids {
-            p["ids"] = ids.clone();
-        }
-        p
-    };
-    let mut applied = Map::new();
+/// A command a drawing tool runs and its params.
+type Step<'a> = (&'a str, Value);
+
+/// The commands that apply `a`'s `fill`, `stroke`, `strokeWidth`, `dash`, `cap` and `join`, without
+/// targets, and what each applies.
+fn paint_steps(a: &Args) -> Result<(Vec<Step<'static>>, Map<String, Value>), String> {
+    let (mut steps, mut applied) = (vec![], Map::new());
     if let Some(f) = a.get("fill") {
-        exec(b, "paint.setFill", with_ids(paint_params(f)?))?;
+        steps.push(("paint.setFill", paint_params(f)?));
         applied.insert("fill".into(), f.clone());
     }
     if let Some(s) = a.get("stroke") {
-        exec(b, "paint.setStroke", with_ids(paint_params(s)?))?;
+        steps.push(("paint.setStroke", paint_params(s)?));
         applied.insert("stroke".into(), s.clone());
     }
     // Weight, dash, cap and join go to one stroke.set.
@@ -558,7 +557,18 @@ fn apply_paint(b: &mut dyn Backend, a: &Args, ids: Option<Value>) -> Result<Valu
         }
     }
     if !stroke.is_empty() {
-        exec(b, "stroke.set", with_ids(Value::Object(stroke)))?;
+        steps.push(("stroke.set", Value::Object(stroke)));
+    }
+    Ok((steps, applied))
+}
+
+fn apply_paint(b: &mut dyn Backend, a: &Args, ids: Option<Value>) -> Result<Value, String> {
+    let (steps, applied) = paint_steps(a)?;
+    for (cmd, mut p) in steps {
+        if let Some(ids) = &ids {
+            p["ids"] = ids.clone();
+        }
+        exec(b, cmd, p)?;
     }
     Ok(Value::Object(applied))
 }
@@ -609,9 +619,18 @@ fn check_draw_options(b: &mut dyn Backend, a: &Args) -> Result<(), String> {
     Ok(())
 }
 
-/// Applies the checked options of [`check_draw_options`] to the new object `ids`, adding what was
-/// applied to `made`. Paint and stroke options are [`apply_paint`]'s.
-fn apply_draw_options(b: &mut dyn Backend, a: &Args, ids: Option<Value>, made: &mut Value) -> Result<(), String> {
+/// Draws an object with `create` (a creating command and its params) and styles it with `a`'s
+/// paint and draw options ([`check_draw_options`], checked first) as ONE `command.batch`, named
+/// `label` (the undo step the creating command makes on its own): any step the engine refuses — a
+/// colour it can't read, a swatch the document lacks — rolls the whole call back, so it leaves no
+/// object and no undo step behind (#3545). The styling steps act on the new object, which the
+/// creating command selects, and on its whole appearance (`item: null`) → `made` with the new
+/// object's `id`, the `paint` applied and the other options applied.
+fn draw(b: &mut dyn Backend, a: &Args, label: &str, create: Step<'_>, mut made: Value) -> Result<Value, String> {
+    check_draw_options(b, a)?;
+    let (paint, applied) = paint_steps(a)?;
+    let mut steps = vec![create];
+    steps.extend(paint);
     let mut props = json!({});
     for k in ["name", "opacity"] {
         if let Some(v) = a.get(k) {
@@ -619,34 +638,40 @@ fn apply_draw_options(b: &mut dyn Backend, a: &Args, ids: Option<Value>, made: &
             made[k] = v.clone();
         }
     }
-    if let Some(ids) = &ids {
-        props["ids"] = ids.clone();
-    }
     if a.contains_key("name") || a.contains_key("opacity") {
-        exec(b, "object.setProps", props)?;
+        steps.push(("object.setProps", props));
     }
-    let effects = a.get("effects").and_then(Value::as_array).filter(|e| !e.is_empty());
-    if let Some(effects) = effects {
-        let mut applied = vec![];
-        for e in effects {
-            // The whole object (item: null), as the Effect menu applies it.
-            let mut p = json!({"effect": e.get("effect"), "params": e.get("params").cloned().unwrap_or(json!({})), "item": null});
-            if let Some(ids) = &ids {
-                p["ids"] = ids.clone();
+    // The fill, stroke and effects go to the new object's whole appearance (item: null), as the
+    // Fill and Stroke proxies and the Effect menu apply them to a selected object.
+    let effects = a.get("effects").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+    for e in effects {
+        steps.push(("effect.apply", json!({"effect": e.get("effect"), "params": e.get("params").cloned().unwrap_or(json!({}))})));
+    }
+    let commands: Vec<Value> = steps
+        .into_iter()
+        .map(|(cmd, mut p)| {
+            if matches!(cmd, "paint.setFill" | "paint.setStroke" | "stroke.set" | "effect.apply") {
+                p["item"] = Value::Null;
             }
-            applied.push(exec(b, "effect.apply", p)?);
-        }
-        made["effects"] = Value::Array(applied);
+            json!({"command": cmd, "params": p})
+        })
+        .collect();
+    // The engine names the failed step of its batch; the caller sent no batch, so the reply gives
+    // the step's own error.
+    let r = exec(b, "command.batch", json!({"label": label, "commands": commands})).map_err(|e| match e.split_once(" failed: ") {
+        Some((step, error)) if step.starts_with("batch step ") => error.to_string(),
+        _ => e,
+    })?;
+    let results = r.get("results").and_then(Value::as_array).ok_or("command.batch returned no results")?;
+    made["id"] = results.first().and_then(|r| r.get("id")).cloned().unwrap_or(Value::Null);
+    made["paint"] = Value::Object(applied);
+    if !effects.is_empty() {
+        made["effects"] = Value::Array(results.iter().skip(results.len().saturating_sub(effects.len())).cloned().collect());
     }
-    Ok(())
-}
-
-fn created_id(r: &Value) -> Option<Value> {
-    r.get("id").filter(|v| v.is_u64()).map(|id| json!([id]))
+    Ok(made)
 }
 
 fn draw_path(b: &mut dyn Backend, a: &Args) -> Result<Value, String> {
-    check_draw_options(b, a)?;
     let mut p = json!({});
     if let Some(d) = a.get("d").and_then(Value::as_str) {
         p["d"] = json!(d);
@@ -667,33 +692,26 @@ fn draw_path(b: &mut dyn Backend, a: &Args) -> Result<Value, String> {
         p["anchors"] = Value::Array(anchors);
         p["closed"] = json!(a.get("closed").and_then(Value::as_bool).unwrap_or(false));
     }
-    let r = exec(b, "path.create", p)?;
-    let paint = apply_paint(b, a, created_id(&r))?;
-    let mut made = json!({"id": r.get("id"), "paint": paint});
-    apply_draw_options(b, a, created_id(&r), &mut made)?;
-    Ok(made)
+    draw(b, a, "Pen", ("path.create", p), json!({}))
 }
 
 fn draw_shape(b: &mut dyn Backend, a: &Args) -> Result<Value, String> {
     let shape = req_str(a, "shape")?;
-    let cmd = match shape {
-        "rectangle" | "rect" => "shape.rectangle",
-        "ellipse" | "circle" => "shape.ellipse",
-        "polygon" => "shape.polygon",
-        "star" => "shape.star",
-        "line" => "shape.line",
+    // Each command and the name of the undo step it makes.
+    let (cmd, label) = match shape {
+        "rectangle" | "rect" if a.get("radius").and_then(Value::as_f64).is_some_and(|r| r > 0.0) => ("shape.rectangle", "Rounded Rectangle"),
+        "rectangle" | "rect" => ("shape.rectangle", "Rectangle"),
+        "ellipse" | "circle" => ("shape.ellipse", "Ellipse"),
+        "polygon" => ("shape.polygon", "Polygon"),
+        "star" => ("shape.star", "Star"),
+        "line" => ("shape.line", "Line"),
         other => return Err(format!("unknown shape `{other}` (rectangle, ellipse, polygon, star, line)")),
     };
-    check_draw_options(b, a)?;
     let mut p = a.clone();
     for k in ["shape", "fill", "stroke", "strokeWidth", "dash", "cap", "join", "opacity", "name", "effects"] {
         p.remove(k);
     }
-    let r = exec(b, cmd, Value::Object(p))?;
-    let paint = apply_paint(b, a, created_id(&r))?;
-    let mut made = json!({"id": r.get("id"), "shape": shape, "paint": paint});
-    apply_draw_options(b, a, created_id(&r), &mut made)?;
-    Ok(made)
+    draw(b, a, label, (cmd, Value::Object(p)), json!({"shape": shape}))
 }
 
 /// Select `ids` when given (tools that act on the selection).

@@ -43,24 +43,27 @@ use crate::guides::{HandleSnap, Leave, PointSnap, Targets};
 use crate::meshedit::MeshEdit;
 use crate::pathtype::{self, BracketDrag, over_bracket};
 use crate::rulerguide::GuideEdit;
-use crate::select::{MoveSnap, is_area_type, matrix_json, release_guide_at};
+use crate::select::{MoveSnap, hold_point, is_area_type, matrix_json, release_guide_at};
 use crate::{Action, Cursor, Mods, Overlay, PointerEvent, PointerKind, Tool, ToolContext, ToolKey};
 
 #[derive(Clone, Debug)]
 enum State {
     Idle,
     /// Dragging the selected anchors, which move alike: `grab` is where the anchor pressed on (or
-    /// the pointer on a segment) was, the point that snaps.
+    /// the point of a straight segment nearest the pointer pressed on it) was, the point that
+    /// snaps.
     MoveAnchors {
         start: Point,
         grab: Point,
         began: bool,
     },
     /// Moving (Alt: copying) the selected objects; `grab`: the anchor an Alt-press picked the
-    /// path by, which snaps as a dragged anchor does.
+    /// path by, which snaps as a dragged anchor does; else `hold`, where the press took hold of
+    /// the object ([`hold_point`]), snaps as the Selection tool's does.
     MoveObject {
         start: Point,
         grab: Option<Point>,
+        hold: Point,
         began: bool,
         /// Group Selection: Shift-click on a selected object toggles it off on release.
         deselect: Option<NodeId>,
@@ -473,7 +476,7 @@ impl Tool for DirectSelectionTool {
                         out.push(Action::Exec("select.set".into(), json!({"ids": [target.0]})));
                     }
                 }
-                self.state = State::MoveObject { start: p, grab: None, began: false, deselect };
+                self.state = State::MoveObject { start: p, grab: None, hold: hold_point(cx, &h, p), began: false, deselect };
                 out
             }
             (PointerKind::DoubleClick, _) if self.group => release_guide_at(cx, p, ev.mods).into_iter().collect(),
@@ -538,7 +541,7 @@ impl Tool for DirectSelectionTool {
                     }
                     // Alt picks the whole path (and Alt-drag copies it), as on a segment.
                     if ev.mods.alt {
-                        self.state = State::MoveObject { start: p, grab: Some(grab), began: false, deselect: None };
+                        self.state = State::MoveObject { start: p, grab: Some(grab), hold: grab, began: false, deselect: None };
                         let whole = cx.selection.contains(id) && cx.selection.partial(id).is_none();
                         return if whole { vec![] } else { vec![Action::Exec("select.set".into(), json!({"ids": [id.0]}))] };
                     }
@@ -549,7 +552,7 @@ impl Tool for DirectSelectionTool {
                     // Paths all selected whole move as objects, held by this anchor, so Alt can turn
                     // the copy on and off during the drag as with the Selection tool.
                     self.state = if already && cx.selection.anchors.is_empty() {
-                        State::MoveObject { start: p, grab: Some(grab), began: false, deselect: None }
+                        State::MoveObject { start: p, grab: Some(grab), hold: grab, began: false, deselect: None }
                     } else {
                         State::MoveAnchors { start: p, grab, began: false }
                     };
@@ -593,7 +596,9 @@ impl Tool for DirectSelectionTool {
                             self.state = if s.curved {
                                 State::Segment { id: h.leaf, si: s.si, seg: s.seg, t: s.t, start: p, began: false }
                             } else {
-                                State::MoveAnchors { start: p, grab: p, began: false }
+                                // Held by the segment itself, so the segment is what lands on a
+                                // ruler guide or lines up, not the pressed spot beside it (#3701).
+                                State::MoveAnchors { start: p, grab: hold_point(cx, &h, p), began: false }
                             };
                             if selected {
                                 return vec![];
@@ -602,7 +607,7 @@ impl Tool for DirectSelectionTool {
                         }
                     }
                     // Clicking the fill selects the whole leaf path (all anchors).
-                    self.state = State::MoveObject { start: p, grab: None, began: false, deselect: None };
+                    self.state = State::MoveObject { start: p, grab: None, hold: hold_point(cx, &h, p), began: false, deselect: None };
                     if ev.mods.shift {
                         return vec![Action::Exec("select.toggle".into(), json!({"id": h.leaf.0}))];
                     }
@@ -624,7 +629,7 @@ impl Tool for DirectSelectionTool {
                     self.state = State::MoveAnchors { start, grab, began: true };
                     self.anchor_snap = Some(PointSnap::new(cx, || Targets::for_anchor_drag(cx.doc, cx.selection)));
                 }
-                let mut d = move_delta(start, p, ev.mods.shift);
+                let mut d = move_delta(start, p, ev.mods.shift, cx.constrain_angle);
                 let unsnapped = d;
                 // The grabbed anchor snaps and the others follow it. Shift keeps the move at its
                 // angle, and the anchor slides along it onto what Smart Guides find there (#886).
@@ -654,14 +659,14 @@ impl Tool for DirectSelectionTool {
                 ));
                 out
             }
-            (PointerKind::Drag, State::MoveObject { start, grab, began, .. }) => {
+            (PointerKind::Drag, State::MoveObject { start, grab, hold, began, .. }) => {
                 let mut out = vec![];
                 if !began {
                     if p.distance(start) < cx.tol(3.0) {
                         return out;
                     }
                     out.push(Action::Begin(if ev.mods.alt { "Copy".into() } else { "Move".into() }));
-                    self.state = State::MoveObject { start, grab, began: true, deselect: None };
+                    self.state = State::MoveObject { start, grab, hold, began: true, deselect: None };
                     if grab.is_some() {
                         // Alt can go down or up at any time: gather both while nothing has moved.
                         self.anchor_snap = Some(PointSnap::new(cx, || Targets::for_anchor_drag(cx.doc, cx.selection)));
@@ -670,7 +675,7 @@ impl Tool for DirectSelectionTool {
                         self.move_snap = Some(MoveSnap::new(cx));
                     }
                 }
-                let mut d = move_delta(start, p, ev.mods.shift);
+                let mut d = move_delta(start, p, ev.mods.shift, cx.constrain_angle);
                 let unsnapped = d;
                 self.guides.clear();
                 let snap = if ev.mods.alt { &self.copy_snap } else { &self.anchor_snap };
@@ -679,7 +684,7 @@ impl Tool for DirectSelectionTool {
                     let (q, guides) = snap.snap_from(cx, grab + (p - start), shift.as_ref());
                     (d, self.guides) = (q - grab, guides);
                 } else if let Some(snap) = &self.move_snap {
-                    (d, self.guides) = if ev.mods.shift { snap.snap_along(cx, start, d, ev.mods.alt) } else { snap.snap(cx, start, d, ev.mods.alt) };
+                    (d, self.guides) = if ev.mods.shift { snap.snap_along(cx, hold, d, ev.mods.alt) } else { snap.snap(cx, hold, d, ev.mods.alt) };
                 }
                 self.snapped = snapped(d, unsnapped, ev.mods.shift, &self.guides);
                 out.push(Action::Preview(
@@ -696,7 +701,7 @@ impl Tool for DirectSelectionTool {
                     }
                     out.push(Action::Begin("Reshape Type Area".into()));
                 }
-                let d = move_delta(start, p, ev.mods.shift);
+                let d = move_delta(start, p, ev.mods.shift, cx.constrain_angle);
                 out.push(Action::Preview("text.reshapeArea".into(), json!({"id": id.0, "anchors": anchors_json(&anchors), "dx": d.x, "dy": d.y})));
                 self.state = State::TypeArea { id, anchors, start, began: true };
                 out
@@ -719,7 +724,7 @@ impl Tool for DirectSelectionTool {
                     out.push(Action::Begin("Reshape Spine".into()));
                     self.state = State::SpinePoint { id, anchor, from, start, began: true };
                 }
-                let q = from + move_delta(start, p, ev.mods.shift);
+                let q = from + move_delta(start, p, ev.mods.shift, cx.constrain_angle);
                 out.push(Action::Preview("object.blend.spine.moveAnchor".into(), json!({"id": id.0, "anchor": anchor, "x": q.x, "y": q.y})));
                 out
             }
@@ -1970,7 +1975,7 @@ mod tests {
         assert!(near(&v, (-100.0, -100.0)) && labels == ["anchor"], "{v} {labels:?}");
         // …and with nothing in reach, at the pointer's distance along its angle.
         let (v, labels) = drag(&mut t, &c, (300.0, 300.0), (380.0, 302.0), shift);
-        let s = move_delta(Point::new(300.0, 300.0), Point::new(380.0, 302.0), true);
+        let s = move_delta(Point::new(300.0, 300.0), Point::new(380.0, 302.0), true, 0.0);
         assert!(near(&v, (s.x, s.y)) && labels.is_empty(), "{v} {labels:?}");
         // Two anchors: the one pressed on (B's top-right) lands on A's corner.
         let two = anchors_of(b, &[(0, 0), (0, 1)]);

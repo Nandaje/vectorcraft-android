@@ -25,7 +25,9 @@ fn confined(tag: &str, read: bool, write: bool) -> (Server, PathBuf) {
     std::fs::write(base.join("in2/c.svg"), SVG).unwrap();
     let in_dir = base.join("in");
     let out_dir = base.join("out");
-    let roots = AutomationRoots::new(read.then_some(in_dir.as_path()), write.then_some(out_dir.as_path())).unwrap();
+    let (read, write): (Vec<&Path>, Vec<&Path>) =
+        (read.then_some(in_dir.as_path()).into_iter().collect(), write.then_some(out_dir.as_path()).into_iter().collect());
+    let roots = AutomationRoots::new(&read, &write).unwrap();
     (Server::new(Box::new(Headless::with_document().with_automation_roots(roots))), base)
 }
 

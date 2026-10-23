@@ -21,9 +21,10 @@ use vectorcraft_geom::{Affine, Vec2};
 /// (filters composite normally; the mode comes back on import).
 pub(crate) const BLEND: &str = "data-vc-blend";
 
-/// The blend modes our export recorded ([`BLEND`]), by filter id.
-pub(super) fn blends(xml: &roxmltree::Document) -> HashMap<String, String> {
-    if !xml.input_text().contains(BLEND) {
+/// The blend modes our export recorded ([`BLEND`]), by filter id. `markers` is the text with its
+/// data URLs left out ([`super::depth::prescan`]).
+pub(super) fn blends(xml: &roxmltree::Document, markers: &str) -> HashMap<String, String> {
+    if !markers.contains(BLEND) {
         return HashMap::new();
     }
     xml.descendants()

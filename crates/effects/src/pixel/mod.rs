@@ -2,8 +2,8 @@
 //! Poster Edges, Rough Pastels, Smudge Stick, Sponge and Watercolor, Blur › Radial Blur and Smart Blur, Brush Strokes › Accented Edges, Angled Strokes,
 //! Crosshatch, Dark Strokes, Ink Outlines, Spatter, Sprayed Strokes and Sumi-e, Distort › Diffuse
 //! Glow, Glass and Ocean Ripple, Pixelate › Color Halftone, Crystallize, Mezzotint and Pointillize,
-//! Sharpen › Unsharp Mask, Sketch › Bas Relief, Chalk & Charcoal, Charcoal, Graphic Pen, Halftone Pattern, Note Paper, Photocopy, Plaster,
-//! Reticulation, Stamp and Torn Edges, Stylize ›
+//! Sharpen › Unsharp Mask, Sketch › Bas Relief, Chalk & Charcoal, Charcoal, Chrome, Conté Crayon, Graphic Pen, Halftone Pattern,
+//! Note Paper, Photocopy, Plaster, Reticulation, Stamp, Torn Edges and Water Paper, Stylize ›
 //! Glowing Edges, Texture
 //! › Craquelure, Grain, Mosaic Tiles, Patchwork, Stained Glass and Texturizer, and Video ›
 //! De-Interlace and NTSC Colors): filters over premultiplied RGBA8 pixels.
@@ -44,7 +44,7 @@ pub use sketch::{HALFTONE_TYPES, HalftonePattern};
 pub use texture::{GRAIN_TYPES, Grain, LIGHT_DIRECTIONS, Light, TEXTURES, TEXTURES_LOADED, Texture};
 
 /// The Photoshop-style effect ids (all raster effects, see [`crate::is_raster`]).
-pub const PIXEL_EFFECTS: [&str; 55] = [
+pub const PIXEL_EFFECTS: [&str; 56] = [
     "artistic.coloredPencil",
     "artistic.cutout",
     "artistic.dryBrush",
@@ -82,6 +82,7 @@ pub const PIXEL_EFFECTS: [&str; 55] = [
     "sketch.chalkCharcoal",
     "sketch.charcoal",
     "sketch.chrome",
+    "sketch.conteCrayon",
     "sketch.graphicPen",
     "sketch.halftonePattern",
     "sketch.notePaper",
@@ -210,6 +211,11 @@ pub enum PixelFx {
     ChalkCharcoal { chalk: f64, charcoal: f64, pressure: f64 },
     /// Sketch › Chrome: polished chrome relief with `detail` (0..10) and `smoothness` (0..10).
     Chrome { detail: f64, smoothness: f64 },
+    /// Sketch › Conté Crayon: dark areas in a black crayon, light areas in a white one, on mid-grey
+    /// paper; `foreground` and `background` (0..20) set how far each crayon reaches into the
+    /// midtones, and the paper is a `texture` surface scaled by `scaling` (0.5..2), in relief as
+    /// strong as `relief` (0..50), lit from `light`, its heights turned over when `invert`.
+    ConteCrayon { foreground: f64, background: f64, texture: Texture, scaling: f64, relief: f64, light: Light, invert: bool },
     /// Sketch › Graphic Pen: fine linear ink strokes along `dir`, each `length` (1..15) points long
     /// on white paper; `balance` (0..100) sets how much of the tone range becomes black ink.
     GraphicPen { length: f64, balance: f64, direction: StrokeDirection },
@@ -483,6 +489,15 @@ pub(crate) fn parse(id: &str, p: &Value) -> Option<PixelFx> {
             pressure: num(p, "strokePressure", 2.0).clamp(0.0, 5.0),
         },
         "sketch.chrome" => PixelFx::Chrome { detail: num(p, "detail", 4.0).clamp(0.0, 10.0), smoothness: num(p, "smoothness", 4.0).clamp(0.0, 10.0) },
+        "sketch.conteCrayon" => PixelFx::ConteCrayon {
+            foreground: num(p, "foregroundLevel", 12.0).clamp(0.0, 20.0),
+            background: num(p, "backgroundLevel", 10.0).clamp(0.0, 20.0),
+            texture: Texture::parse(text(p, "texture", "canvas")),
+            scaling: num(p, "scaling", 100.0).clamp(50.0, 200.0) / 100.0,
+            relief: num(p, "relief", 4.0).clamp(0.0, 50.0),
+            light: Light::parse(text(p, "lightDirection", "top")),
+            invert: flag(p, "invert", false),
+        },
         "sketch.graphicPen" => PixelFx::GraphicPen {
             length: num(p, "strokeLength", 5.0).clamp(1.0, 15.0),
             balance: num(p, "lightDarkBalance", 50.0).clamp(0.0, 100.0),
@@ -617,6 +632,7 @@ impl PixelFx {
             PixelFx::UnsharpMask { .. }
             | PixelFx::ChalkCharcoal { .. }
             | PixelFx::Chrome { .. }
+            | PixelFx::ConteCrayon { .. }
             | PixelFx::HalftonePattern { .. }
             | PixelFx::NotePaper { .. }
             | PixelFx::Plaster { .. }
@@ -692,6 +708,7 @@ impl PixelFx {
             PixelFx::ColoredPencil { width, .. } => Some(artistic::colored_pencil_reach(width)),
             PixelFx::ChalkCharcoal { .. } => Some(sketch::CHALK_CHARCOAL_REACH),
             PixelFx::Chrome { smoothness, .. } => Some(sketch::chrome_reach(smoothness)),
+            PixelFx::ConteCrayon { .. } => Some(sketch::CONTE_REACH),
             PixelFx::FilmGrain { .. }
             | PixelFx::Mezzotint { .. }
             | PixelFx::HalftonePattern { .. }
@@ -778,6 +795,9 @@ impl PixelFx {
             PixelFx::UnsharpMask { amount, radius, threshold } => sharpen::unsharp(px, w, h, amount, to_px(radius), threshold),
             PixelFx::ChalkCharcoal { chalk, charcoal, pressure } => sketch::chalk_charcoal(px, w, h, space, chalk, charcoal, pressure),
             PixelFx::Chrome { detail, smoothness } => sketch::chrome(px, w, h, space, detail, smoothness),
+            PixelFx::ConteCrayon { foreground, background, ref texture, scaling, relief, light, invert } => {
+                sketch::conte_crayon(px, w, h, space, foreground, background, texture, scaling, relief, light, invert)
+            }
             PixelFx::GraphicPen { length, balance, direction } => brushstrokes::graphic_pen(px, w, h, space, length, balance, direction),
             PixelFx::HalftonePattern { size, contrast, kind } => sketch::halftone_pattern(px, w, h, space, size, contrast, kind),
             PixelFx::NotePaper { balance, graininess, relief } => sketch::note_paper(px, w, h, space, balance, graininess, relief),

@@ -154,7 +154,7 @@ fn busy_page() -> Document {
     shadowed.appearance.effects.push(vectorcraft_doc::Effect { id: "stylize.dropShadow".into(), params: shadow, visible: true });
     add(&mut d, shadowed);
     let stops = vec![GradientStop::new(0.0, CYAN), GradientStop { opacity: 0.3, ..GradientStop::new(1.0, MAGENTA) }];
-    let ramp = Paint::Gradient(Box::new(GradientPaint::new(Gradient { kind: GradientKind::Linear, stops })));
+    let ramp = Paint::Gradient(Box::new(GradientPaint::new(Gradient::new(GradientKind::Linear, stops))));
     let n = Node::path(d.alloc_id(), shapes::rectangle(Rect::new(20.0, 90.0, 120.0, 130.0)), Appearance::basic(ramp, Paint::None, 0.0));
     add(&mut d, n);
     let mut over = rect(&mut d, Rect::new(100.0, 80.0, 160.0, 120.0), Color::cmyk(0.0, 0.0, 1.0, 0.0));

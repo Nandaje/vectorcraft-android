@@ -24,7 +24,7 @@ thread_local! {
     static GRIDS: RefCell<FrameCache<u64, Arc<Pixmap>>> = RefCell::new(FrameCache::new(lru::FREEFORM_BUDGET, usize::MAX));
 }
 
-fn hash_color(c: &Color, h: &mut impl Hasher) {
+pub(crate) fn hash_color(c: &Color, h: &mut impl Hasher) {
     match *c {
         Color::Rgb { r, g, b } => (0u8, r.to_bits(), g.to_bits(), b.to_bits()).hash(h),
         Color::Cmyk { c, m, y, k } => (1u8, c.to_bits(), m.to_bits(), y.to_bits(), k.to_bits()).hash(h),

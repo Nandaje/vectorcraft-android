@@ -126,7 +126,7 @@ fn svg_images_import_as_vector_art() {
     assert!((boxes[1].x0 - 100.0).abs() < 1e-6 && (boxes[1].height() - 20.0).abs() < 1e-6, "{boxes:?}");
 }
 
-/// usvg unpacks gzipped SVG images itself (its `svgz` feature, which the workspace keeps).
+/// Gzipped SVG images are unpacked before usvg reads them, within the cap of an SVGZ file.
 #[test]
 fn svgz_images_import_as_vector_art() {
     let dir = folder("svgzimage");
@@ -145,6 +145,58 @@ fn svgz_images_import_as_vector_art() {
     assert_eq!(boxes.len(), 2, "{:?}", art(&d));
     assert!((boxes[0].x0 - 10.0).abs() < 1e-6 && (boxes[0].width() - 20.0).abs() < 1e-6, "{boxes:?}");
     assert!((boxes[1].x0 - 100.0).abs() < 1e-6 && (boxes[1].height() - 20.0).abs() < 1e-6, "{boxes:?}");
+}
+
+const SVG_NS: &str = r#"xmlns="http://www.w3.org/2000/svg""#;
+
+/// An image showing `svg`, from a base64 data URL of type `mime` (none when empty).
+fn image_of(mime: &str, svg: &str) -> String {
+    format!(r#"<image href="data:{mime};base64,{}" width="20" height="10"/>"#, vectorcraft_svg::base64_encode(svg.as_bytes()))
+}
+
+/// An SVG showing a chain of `levels` SVG images from data URLs of type `mime`: each holds a
+/// rectangle in `n` groups in one another, and the next image beside it.
+fn nested_images(levels: usize, n: usize, mime: &str) -> String {
+    let mut inner = String::new();
+    for _ in 0..levels {
+        let (open, close) = ("<g>".repeat(n), "</g>".repeat(n));
+        let svg = format!(r#"<svg {SVG_NS} width="20" height="10">{open}<rect width="10" height="10"/>{inner}{close}</svg>"#);
+        inner = image_of(mime, &svg);
+    }
+    format!(r#"<svg {SVG_NS} width="20" height="10">{inner}</svg>"#)
+}
+
+fn rects(d: &Document) -> usize {
+    art(d).iter().filter(|n| n.path_data().is_some()).count()
+}
+
+/// usvg reads an SVG image while it reads the SVG showing it, on the same stack, so images in
+/// images share one depth cap, whatever type their data URL has (usvg reads SVG from
+/// `image/svg+xml`, `text/plain` and untyped data): what is past it is left out, with a warning,
+/// where it overflowed the stack, an abort (#3562).
+#[test]
+fn svg_images_in_svg_images_share_the_depth_cap() {
+    let most = vectorcraft_svg::MAX_ELEMENT_DEPTH;
+    let left_out = |w: &[String]| w.iter().any(|w| w.contains("SVG images were left out"));
+    for mime in ["image/svg+xml", "text/plain", ""] {
+        // Within the cap together: all of it.
+        let (d, w) = import_with_report(&nested_images(3, 20, mime)).unwrap();
+        assert_eq!(rects(&d), 3, "{mime}");
+        assert!(!left_out(&w), "{mime}: {w:?}");
+        // Each image past the cap; each within it, but not together (the file, the image, then
+        // the groups and the rectangle in each).
+        for (levels, n, kept) in [(3, 1000, 0), (12, most - 4, 1)] {
+            let (d, w) = import_with_report(&nested_images(levels, n, mime)).unwrap();
+            assert_eq!(rects(&d), kept, "{mime}: {levels} × {n}");
+            assert!(left_out(&w), "{mime}: {levels} × {n}: {w:?}");
+        }
+    }
+    // Shallow XML, a deep tree: a chain of `<use>`, measured as in the file itself.
+    let links: String = (0..3000).map(|i| format!("<g id='u{i}'><use href='#u{}'/></g>", i + 1)).collect();
+    let chain = format!(r##"<svg {SVG_NS} width="9" height="9"><defs>{links}<rect id="u3000" width="1" height="1"/></defs><use href="#u0"/></svg>"##);
+    let (d, w) = import_with_report(&svg(&image_of("image/svg+xml", &chain))).unwrap();
+    assert_eq!(rects(&d), 0);
+    assert!(left_out(&w), "{w:?}");
 }
 
 #[test]

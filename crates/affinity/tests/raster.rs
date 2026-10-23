@@ -103,13 +103,16 @@ fn rotated_scaled_pixels_keep_the_full_affine_transform() {
 }
 
 #[test]
-fn cmyk_and_lab_losses_are_reported() {
+fn cmyk_pixels_stay_cmyk_and_lab_losses_are_reported() {
+    // CMYK layers keep their inks for the importer to convert through a colour profile.
     let Some((_, cmyk, images)) = read_fixture("patchy-cmyk.af") else { return };
     assert_eq!(images.len(), 1);
     assert_eq!((images[0].width, images[0].height), (64, 48));
-    let Pixels::Rgba8(pixels) = &images[0].pixels else { panic!() };
-    assert_eq!(crc32fast::hash(pixels), 0x5872bb76);
-    assert_eq!(cmyk.warnings, ["CMYK pixel layers (converted to RGB without the document's colour profile)"]);
+    let Pixels::Cmyka8(pixels) = &images[0].pixels else { panic!() };
+    assert_eq!(pixels.len(), 64 * 48 * 5);
+    assert_eq!(crc32fast::hash(pixels), 0x56b1f659);
+    assert!(cmyk.warnings.is_empty(), "{:?}", cmyk.warnings);
+    assert_eq!(cmyk.cmyk_profile, None, "this file embeds no profile");
     let (_, lab, images) = read_fixture("patchy-lab.af").unwrap();
     assert!(images.is_empty());
     assert_eq!(lab.warnings, ["pixel layers in grey, Lab or 32-bit formats"]);

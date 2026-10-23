@@ -717,6 +717,19 @@ impl ParaStyle {
             t.position = within(t.position, 0.0, 100_000.0);
         }
     }
+
+    /// The leading of characters styled `st` in this paragraph, as the layout sets it: their own
+    /// leading, or for Auto leading the paragraph's Justification › Auto Leading share of their
+    /// size (exactly [`CharStyle::effective_leading`] at the default 120%, or when the share is
+    /// not a finite number).
+    pub fn effective_leading(&self, st: &CharStyle) -> f64 {
+        let auto = self.justification.auto_leading;
+        if st.leading.is_some() || auto == JustificationOptions::default().auto_leading {
+            return st.effective_leading();
+        }
+        let l = self.justification.auto_leading_for(st.size);
+        if l.is_finite() { l } else { st.effective_leading() }
+    }
 }
 
 /// [`ParaStyle`] as saved. [`Justify::Auto`] is written as the alignment it has in the paragraph
@@ -1713,18 +1726,17 @@ impl TextObject {
     /// How far the characters' strokes paint past their glyphs, in document space: they scale
     /// with the type.
     pub fn char_stroke_outset(&self) -> f64 {
-        self.char_strokes(CharStyle::stroke_outset)
+        let k = crate::node::Scaling::factor(self.xf).unwrap_or(1.0);
+        self.runs.iter().map(|r| r.style.stroke_outset()).fold(0.0, f64::max) * k
     }
     /// How far the characters' strokes can paint past their glyphs, their miter spikes and square
     /// caps included ([`StrokeLayer::reach`]), in document space: what a change of the type must
-    /// redraw. The visual bounds take [`Self::char_stroke_outset`].
+    /// redraw. They stretch with the type, so this is as far as its transform takes them on either
+    /// axis. The visual bounds take [`Self::char_stroke_outset`].
     pub fn char_stroke_reach(&self) -> f64 {
-        self.char_strokes(|style| if style.has_stroke() { style.stroke_layer().reach() } else { 0.0 })
-    }
-    /// The farthest `outset` of the characters' styles, scaled with the type.
-    fn char_strokes(&self, outset: impl Fn(&CharStyle) -> f64) -> f64 {
-        let k = crate::node::Scaling::factor(self.xf).unwrap_or(1.0);
-        self.runs.iter().map(|r| outset(&r.style)).fold(0.0, f64::max) * k
+        let reach = self.runs.iter().filter(|r| r.style.has_stroke()).map(|r| r.style.stroke_layer().reach()).fold(0.0, f64::max);
+        let [a, b, c, d, ..] = self.xf.as_coeffs();
+        reach * (a.abs() + c.abs()).max(b.abs() + d.abs())
     }
     pub fn transform(&mut self, a: Affine) {
         self.xf = a * self.xf;
@@ -1988,6 +2000,22 @@ mod tests {
         let old = serde_json::to_value(&st).unwrap();
         assert_eq!(serde_json::from_value::<CharStyle>(old).unwrap().digits, Digits::Default);
         assert_eq!(serde_json::from_value::<CharStyle>(serde_json::to_value(&farsi).unwrap()).unwrap(), farsi);
+    }
+
+    /// Auto leading follows the paragraph's Auto Leading; a set leading doesn't.
+    #[test]
+    fn paragraph_effective_leading_follows_auto_leading() {
+        let st = CharStyle { size: 10.0, leading: None, ..CharStyle::default() };
+        let mut para = ParaStyle::default();
+        assert_eq!(para.effective_leading(&st), st.effective_leading(), "default 120%");
+        para.justification.auto_leading = 200.0;
+        assert_eq!(para.effective_leading(&st), 20.0);
+        para.justification.auto_leading = 0.0;
+        assert_eq!(para.effective_leading(&st), 0.0);
+        let set = CharStyle { leading: Some(14.0), ..st.clone() };
+        assert_eq!(para.effective_leading(&set), 14.0);
+        para.justification.auto_leading = f64::NAN;
+        assert_eq!(para.effective_leading(&st), st.effective_leading(), "not a number");
     }
 
     /// A file can't feed layout justification values `text.setFormat` would refuse: each is

@@ -48,10 +48,10 @@ fn sample() -> Document {
     let clipped = shape(&mut doc, shapes::rectangle(Rect::new(150.0, 10.0, 190.0, 50.0)), Paint::solid(Color::gray(0.25)), Paint::None);
     let window = Node::new(doc.alloc_id(), NodeKind::Group { children: vec![Arc::new(clip), Arc::new(clipped)], clip: true });
     doc.insert(Some(back), usize::MAX, window).unwrap();
-    let g = Gradient {
-        kind: GradientKind::Linear,
-        stops: vec![GradientStop::new(0.0, Color::rgb(1.0, 1.0, 1.0)), GradientStop::new(1.0, Color::rgb(0.0, 0.0, 0.0))],
-    };
+    let g = Gradient::new(
+        GradientKind::Linear,
+        vec![GradientStop::new(0.0, Color::rgb(1.0, 1.0, 1.0)), GradientStop::new(1.0, Color::rgb(0.0, 0.0, 0.0))],
+    );
     let shaded = shape(&mut doc, shapes::rectangle(Rect::new(10.0, 60.0, 50.0, 90.0)), Paint::Gradient(Box::new(GradientPaint::new(g))), Paint::None);
     doc.insert(Some(back), usize::MAX, shaded).unwrap();
     let ellipse = shape(&mut doc, shapes::ellipse(Rect::new(100.0, 60.0, 160.0, 90.0)), red(), Paint::None);
@@ -92,20 +92,36 @@ fn write_with(doc: &Document, o: LegacyAiOptions) -> LegacyAiOutput {
 /// hidden objects shown when `o` writes them visible, and its gradient fills and strokes painted
 /// in their first stop's color.
 fn as_printed(doc: &Document, o: &LegacyAiOptions) -> Document {
-    // A run's glyphs, laid out, as one path with the run's fill (the renderer draws no type).
-    fn outlined(t: &vectorcraft_doc::TextObject) -> Node {
+    // A run's glyphs, laid out, as one path with the run's fill (the renderer draws no type), and
+    // its colour bitmap glyphs as images (their pixels added to `images`), its COLR glyphs as their
+    // layers.
+    fn outlined(t: &vectorcraft_doc::TextObject, images: &mut std::collections::BTreeMap<String, ImageBlob>) -> Node {
         let layout = vectorcraft_text::layout(vectorcraft_text::FontDb::global(), t);
-        let runs = t.runs.iter().enumerate().map(|(i, run)| {
-            let mut bp = kurbo::BezPath::new();
-            for g in layout.glyphs.iter().filter(|g| g.run == i) {
-                bp.extend(g.outline.iter());
-            }
-            let path = PathData::from_bezpath(&bp).transformed(t.xf);
-            Arc::new(Node::path(vectorcraft_doc::NodeId(0), path, Appearance::basic(run.style.fill.clone(), Paint::None, 0.0)))
-        });
-        Node::group(vectorcraft_doc::NodeId(0), runs.collect())
+        let mut nodes: Vec<Arc<Node>> = t
+            .runs
+            .iter()
+            .enumerate()
+            .map(|(i, run)| {
+                let mut bp = kurbo::BezPath::new();
+                for g in layout.glyphs.iter().filter(|g| g.run == i) {
+                    bp.extend(g.outline.iter());
+                }
+                let path = PathData::from_bezpath(&bp).transformed(t.xf);
+                Arc::new(Node::path(vectorcraft_doc::NodeId(0), path, Appearance::basic(run.style.fill.clone(), Paint::None, 0.0)))
+            })
+            .collect();
+        for g in &layout.glyphs {
+            let Some((image, to_text)) = g.placed_image() else { continue };
+            let key = image.blob.content_key();
+            images.insert(key.clone(), image.blob.clone());
+            let im = ImageObject { key, width: image.width, height: image.height, xf: t.xf * to_text, link: None, placement: Default::default() };
+            nodes.push(Arc::new(Node::new(vectorcraft_doc::NodeId(0), NodeKind::Image(Box::new(im)))));
+        }
+        // COLR glyphs: their layers.
+        nodes.extend(layout.glyphs.iter().filter_map(|g| g.placed_colour(t.xf)).map(Arc::new));
+        Node::group(vectorcraft_doc::NodeId(0), nodes)
     }
-    fn plain(nodes: &mut Vec<Arc<Node>>, o: &LegacyAiOptions) {
+    fn plain(nodes: &mut Vec<Arc<Node>>, o: &LegacyAiOptions, images: &mut std::collections::BTreeMap<String, ImageBlob>) {
         nodes.retain(|n| match &n.kind {
             NodeKind::Text(t) => o.outline_text || !writable(t),
             NodeKind::Layer { printable, .. } => *printable,
@@ -113,7 +129,7 @@ fn as_printed(doc: &Document, o: &LegacyAiOptions) -> Document {
         });
         for n in nodes {
             if let NodeKind::Text(t) = &n.kind {
-                *n = Arc::new(outlined(t));
+                *n = Arc::new(outlined(t, images));
             }
             let n = Arc::make_mut(n);
             if o.hidden == HiddenObjects::Visible && !matches!(n.kind, NodeKind::Layer { .. }) {
@@ -129,12 +145,14 @@ fn as_printed(doc: &Document, o: &LegacyAiOptions) -> Document {
                 }
             }
             if let Some(c) = n.children_mut() {
-                plain(c, o);
+                plain(c, o, images);
             }
         }
     }
     let mut d = doc.clone();
-    plain(&mut d.layers, o);
+    let mut images = std::mem::take(&mut d.images);
+    plain(&mut d.layers, o, &mut images);
+    d.images = images;
     d
 }
 
@@ -407,10 +425,10 @@ fn empty_images_get_the_size_note_and_undecodable_ones_the_decode_note() {
 #[test]
 fn a_gradient_fill_and_its_stroke_are_one_object() {
     let mut doc = Document::new(100.0, 100.0);
-    let g = Gradient {
-        kind: GradientKind::Radial,
-        stops: vec![GradientStop::new(0.0, Color::rgb(1.0, 1.0, 1.0)), GradientStop::new(1.0, Color::cmyk(0.0, 0.0, 0.0, 1.0))],
-    };
+    let g = Gradient::new(
+        GradientKind::Radial,
+        vec![GradientStop::new(0.0, Color::rgb(1.0, 1.0, 1.0)), GradientStop::new(1.0, Color::cmyk(0.0, 0.0, 0.0, 1.0))],
+    );
     let mut paint = GradientPaint::new(g);
     paint.geom = Some(vectorcraft_color::GradientGeom {
         start: vectorcraft_geom::Point::new(30.0, 30.0),
@@ -435,7 +453,7 @@ fn a_gradient_fill_and_its_stroke_are_one_object() {
 /// to the object).
 fn white_to_navy(kind: GradientKind, geom: Option<vectorcraft_color::GradientGeom>) -> Paint {
     let navy = Color::rgb(27.0 / 255.0, 42.0 / 255.0, 107.0 / 255.0);
-    let g = Gradient { kind, stops: vec![GradientStop::new(0.0, Color::rgb(1.0, 1.0, 1.0)), GradientStop::new(1.0, navy)] };
+    let g = Gradient::new(kind, vec![GradientStop::new(0.0, Color::rgb(1.0, 1.0, 1.0)), GradientStop::new(1.0, navy)]);
     Paint::Gradient(Box::new(GradientPaint { geom, ..GradientPaint::new(g) }))
 }
 
@@ -576,7 +594,7 @@ fn radial_gradient_stops_are_listed_from_the_first() {
     let mut doc = Document::new(200.0, 100.0);
     let layer = doc.layers[0].id;
     for (kind, x) in [(GradientKind::Radial, 10.0), (GradientKind::Linear, 110.0)] {
-        let paint = Paint::Gradient(Box::new(GradientPaint::new(Gradient { kind, stops: stops.clone() })));
+        let paint = Paint::Gradient(Box::new(GradientPaint::new(Gradient::new(kind, stops.clone()))));
         let n = shape(&mut doc, shapes::rectangle(Rect::new(x, 10.0, x + 80.0, 90.0)), paint, Paint::None);
         doc.insert(Some(layer), usize::MAX, n).unwrap();
     }
@@ -715,7 +733,7 @@ fn spots_and_gradient(spots: &[&str], gradient: &str) -> Document {
     }
     let mut first = GradientStop::new(0.0, Color::cmyk(0.0, 0.5, 1.0, 0.0));
     first.swatch = Some(spots[0].into());
-    let g = Gradient { kind: GradientKind::Linear, stops: vec![first, GradientStop::new(1.0, Color::cmyk(0.0, 0.0, 0.0, 0.0))] };
+    let g = Gradient::new(GradientKind::Linear, vec![first, GradientStop::new(1.0, Color::cmyk(0.0, 0.0, 0.0, 0.0))]);
     let mut paint = GradientPaint::new(g);
     paint.swatch = Some(gradient.into());
     let n = shape(&mut doc, shapes::rectangle(Rect::new(10.0, 50.0, 50.0, 90.0)), Paint::Gradient(Box::new(paint)), Paint::None);
@@ -782,10 +800,10 @@ fn spot_gradient_and_title_names_are_written_in_windows_1252() {
 fn names_outside_windows_1252_are_replaced_and_kept_apart() {
     // 赤 and 青 (spot colors), 渐变 and グラ (gradients), 日本 (the title).
     let mut doc = spots_and_gradient(&["\u{8d64}", "\u{9752}"], "\u{6e10}\u{53d8}");
-    let g = Gradient {
-        kind: GradientKind::Linear,
-        stops: vec![GradientStop::new(0.0, Color::cmyk(1.0, 0.0, 0.0, 0.0)), GradientStop::new(1.0, Color::cmyk(0.0, 0.0, 0.0, 0.0))],
-    };
+    let g = Gradient::new(
+        GradientKind::Linear,
+        vec![GradientStop::new(0.0, Color::cmyk(1.0, 0.0, 0.0, 0.0)), GradientStop::new(1.0, Color::cmyk(0.0, 0.0, 0.0, 0.0))],
+    );
     let mut paint = GradientPaint::new(g);
     paint.swatch = Some("\u{30b0}\u{30e9}".into());
     let n = shape(&mut doc, shapes::rectangle(Rect::new(60.0, 50.0, 100.0, 90.0)), Paint::Gradient(Box::new(paint)), Paint::None);
@@ -1140,4 +1158,40 @@ fn layer_names_outside_latin_1_are_replaced_and_warned() {
     assert!(out.warnings.iter().any(|w| w == LAYER_NAME), "{:?}", out.warnings);
     // A name Latin-1 can hold is written as it is, with no warning.
     assert!(!layered("Caf\u{e9}").warnings.iter().any(|w| w == LAYER_NAME));
+}
+
+/// Type written as outlines writes its colour bitmap glyphs (emoji) as images where they sit.
+#[test]
+fn colour_bitmap_glyphs_of_outlined_type_are_images() {
+    use vectorcraft_doc::{CharStyle, TextObject};
+    use vectorcraft_text::test_fonts::{COLOUR_CHAR, colour_bitmap_family, colour_bitmap_font};
+    vectorcraft_text::FontDb::global().add_font(colour_bitmap_font(false).unwrap());
+    let mut doc = Document::new(200.0, 100.0);
+    let st = CharStyle { font_family: colour_bitmap_family(false).into(), size: 32.0, ..CharStyle::default() };
+    // Cyrillic, which 8-bit text can't hold: the type is written as outlines.
+    let t = TextObject::point(vectorcraft_geom::Point::new(20.0, 60.0), &format!("{COLOUR_CHAR}\u{416}"), st);
+    let l = doc.layers[0].id;
+    let id = doc.alloc_id();
+    doc.insert(Some(l), 0, Node::new(id, NodeKind::Text(Box::new(t)))).unwrap();
+    let text = String::from_utf8(write(&doc).bytes).unwrap();
+    let images = rasters(&text);
+    assert_eq!(images.len(), 1, "{text}");
+    assert!(images[0][2].ends_with(" ] 0 0 16 16 16 16 8 3 0 0 0 0 XI"), "{:?}", images[0]);
+}
+
+#[test]
+fn colr_glyphs_of_outlined_type_are_vector_art() {
+    use vectorcraft_doc::{CharStyle, TextObject};
+    use vectorcraft_text::test_fonts::{COLOUR_CHAR, colr_family, colr_font};
+    vectorcraft_text::FontDb::global().add_font(colr_font(false).unwrap());
+    let mut doc = Document::new(200.0, 100.0);
+    let st = CharStyle { font_family: colr_family(false).into(), size: 32.0, ..CharStyle::default() };
+    // Cyrillic, which 8-bit text can't hold: the type is written as outlines.
+    let t = TextObject::point(vectorcraft_geom::Point::new(20.0, 60.0), &format!("{COLOUR_CHAR}\u{416}"), st);
+    let l = doc.layers[0].id;
+    let id = doc.alloc_id();
+    doc.insert(Some(l), 0, Node::new(id, NodeKind::Text(Box::new(t)))).unwrap();
+    let text = String::from_utf8(write(&doc).bytes).unwrap();
+    assert!(rasters(&text).is_empty(), "no images: {text}");
+    assert!(text.contains("1 0 0 Xa"), "the red layer: {text}");
 }

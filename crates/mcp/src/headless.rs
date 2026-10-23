@@ -168,6 +168,10 @@ impl Headless {
                 }
                 UiRequest::Dialog(k, p) => out.push(json!({"dialog": k, "params": p})),
                 UiRequest::Status(msg) => out.push(json!({"status": msg})),
+                // The place cursor's file, placed at once.
+                UiRequest::Place(p) => {
+                    self.session.execute("file.place", &p).map_err(|e| e.to_string())?;
+                }
             }
         }
         Ok(())

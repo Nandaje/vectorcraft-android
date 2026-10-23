@@ -1,4 +1,5 @@
-//! Placed documents: another VectorCraft file placed linked ([`PlacedDocument`]).
+//! Placed documents: another VectorCraft file, or a page of a PDF or `.ai` file, placed linked
+//! ([`PlacedDocument`]).
 //!
 //! The object keeps the link to the file and the file's bytes, stored like image data in
 //! [`Document::images`] (with a small preview a save writes instead, as for linked images), so the
@@ -6,8 +7,9 @@
 //! joins the object tree, so editing can't reach it: it is locked by design. Drawing and exporting
 //! expand it like a live object ([`crate::live::expanded`]).
 //!
-//! The file is read by the native format's loader, which lives above this crate and registers
-//! itself ([`set_loader`]); the art read is kept in a small cache by content. Before exporting,
+//! The file is read by the engine's loader (native documents, PDF and `.ai` pages), which lives
+//! above this crate and registers itself ([`set_loader`]); the art read is kept in a small cache
+//! by content. Before exporting,
 //! every exporter calls [`Document::with_placed_art`], which adds the resources the art uses
 //! (images, symbols, patterns) under names of their own ([`RESOURCE_PREFIX`]) to a temporary copy
 //! of the document, so they never meet the user's or show in panels. Placed documents inside a
@@ -25,16 +27,21 @@ use vectorcraft_color::Paint;
 
 use crate::{AppearanceItem, Document, ImageBlob, ImageObject, LinkInfo, Node, NodeKind, PatternDef, PlacementOptions, Symbol};
 
-/// A placed document: an artboard of another VectorCraft file, shown as one locked object.
+/// A placed document: an artboard of another VectorCraft file, or a page of a PDF or `.ai` file,
+/// shown as one locked object.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PlacedDocument {
-    /// The file (its `page` is the artboard shown, 1-based).
+    /// The file (its `page` is the artboard or page shown, 1-based).
     pub link: LinkInfo,
     /// Key into [`Document::images`]: the file's bytes (see [`key_for`]).
     pub key: String,
     /// The art's bounds rather than the artboard (File › Place's `crop: "bounding"`).
     #[serde(default, skip_serializing_if = "crate::skip::is_default")]
     pub bounding: bool,
+    /// The box of a PDF or `.ai` page shown when not `bounding` (File › Place's `crop`); a
+    /// VectorCraft document shows its artboard whatever this says.
+    #[serde(default, skip_serializing_if = "crate::skip::is_default")]
+    pub page_box: PageBox,
     /// The artboard's size (or the art's) at 100% (pt).
     pub width: f64,
     pub height: f64,
@@ -45,11 +52,43 @@ pub struct PlacedDocument {
     pub placement: PlacementOptions,
 }
 
+/// The box of a PDF page a placed PDF or `.ai` file shows (File › Place's `crop`, other than
+/// `bounding`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum PageBox {
+    /// The visible page area.
+    #[default]
+    Crop,
+    Art,
+    Trim,
+    Bleed,
+    Media,
+}
+
+impl PageBox {
+    /// The `crop` param value.
+    pub fn id(self) -> &'static str {
+        match self {
+            PageBox::Crop => "crop",
+            PageBox::Art => "art",
+            PageBox::Trim => "trim",
+            PageBox::Bleed => "bleed",
+            PageBox::Media => "media",
+        }
+    }
+}
+
 /// The images key of a file's bytes (`hash`, [`crate::links::hash_bytes`]) placed showing
-/// artboard `page` (`bounding`: its art's bounds): objects showing the same thing share a blob and
-/// its preview.
-pub fn key_for(hash: &str, page: u32, bounding: bool) -> String {
-    format!("{hash}-{page}{}", if bounding { "b" } else { "" })
+/// artboard or page `page` (`bounding`: its art's bounds; else the page's box `page_box`):
+/// objects showing the same thing share a blob and its preview.
+pub fn key_for(hash: &str, page: u32, bounding: bool, page_box: PageBox) -> String {
+    let shown = match (bounding, page_box) {
+        (true, _) => "b",
+        (false, PageBox::Crop) => "",
+        (false, b) => b.id(),
+    };
+    format!("{hash}-{page}{shown}")
 }
 
 impl PlacedDocument {
@@ -576,6 +615,7 @@ mod tests {
             link: LinkInfo::new("/art/logo.vectorcraft"),
             key: key.into(),
             bounding: false,
+            page_box: PageBox::Crop,
             width: 80.0,
             height: 40.0,
             xf: Affine::translate((10.0, 10.0)),
@@ -616,9 +656,18 @@ mod tests {
         let v = serde_json::to_value(&n).unwrap();
         assert_eq!(v["kind"]["type"], "placeddocument");
         assert_eq!(v["kind"]["link"]["path"], "/art/logo.vectorcraft");
+        // The box of a PDF page is written only when it isn't the crop box.
+        assert!(v["kind"].get("page_box").is_none(), "{v}");
         let back: Node = serde_json::from_value(v).unwrap();
         assert_eq!(back, n);
-        assert_eq!(key_for("img00", 2, true), "img00-2b");
+        assert_eq!(key_for("img00", 2, true, PageBox::Crop), "img00-2b");
+        assert_eq!(key_for("img00", 2, false, PageBox::Crop), "img00-2");
+        assert_eq!(key_for("img00", 2, false, PageBox::Trim), "img00-2trim");
+        let mut trim = placed("doc1-1trim");
+        trim.page_box = PageBox::Trim;
+        let v = serde_json::to_value(&trim).unwrap();
+        assert_eq!(v["page_box"], "trim");
+        assert_eq!(serde_json::from_value::<PlacedDocument>(v).unwrap(), trim);
     }
 
     #[test]

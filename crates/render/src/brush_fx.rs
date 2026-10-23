@@ -168,6 +168,54 @@ mod tests {
         assert_eq!(again.pixels, img.pixels);
     }
 
+    /// Object opacity fades a brushed stroke's art as a whole, with or without a dash and a fill:
+    /// the same as the object at full opacity inside a group at that opacity.
+    #[test]
+    fn object_opacity_fades_a_brushed_stroke_once() {
+        for (dashed, fill) in [(false, false), (true, false), (false, true), (true, true)] {
+            let node = |d: &mut Document, opacity: f32| {
+                let id = d.alloc_id();
+                let fill = if fill { Paint::solid(Color::rgb(0.9, 0.1, 0.1)) } else { Paint::None };
+                let mut ap = Appearance::basic(fill, Paint::solid(Color::BLACK), 1.0);
+                let st = ap.stroke_mut().unwrap();
+                st.brush = Some("10 pt. Oval".into());
+                if dashed {
+                    st.dash = Some(vectorcraft_doc::Dash { pattern: vec![12.0, 4.0], ..Default::default() });
+                }
+                let mut n = Node::path(id, shapes::rectangle(Rect::new(30.0, 30.0, 170.0, 70.0)), ap);
+                n.opacity = opacity;
+                n
+            };
+            let mut faded = Document::new(200.0, 100.0);
+            let n = node(&mut faded, 0.5);
+            let l = faded.layers[0].id;
+            faded.insert(Some(l), 0, n).unwrap();
+            let mut grouped = Document::new(200.0, 100.0);
+            let n = node(&mut grouped, 1.0);
+            let mut g = Node::group(grouped.alloc_id(), vec![std::sync::Arc::new(n)]);
+            g.opacity = 0.5;
+            let l = grouped.layers[0].id;
+            grouped.insert(Some(l), 0, g).unwrap();
+            let (a, b) = (render(&mut Renderer::new(), &faded), render(&mut Renderer::new(), &grouped));
+            assert!(
+                dark(
+                    render(&mut Renderer::new(), &{
+                        let mut d = Document::new(200.0, 100.0);
+                        let n = node(&mut d, 1.0);
+                        let l = d.layers[0].id;
+                        d.insert(Some(l), 0, n).unwrap();
+                        d
+                    })
+                    .pixel(30, 50)
+                ),
+                "the brush paints the edge"
+            );
+            let off =
+                a.pixels.chunks(4).zip(b.pixels.chunks(4)).filter(|(x, y)| x.iter().zip(*y).any(|(p, q)| (*p as i32 - *q as i32).abs() > 2)).count();
+            assert_eq!(off, 0, "dashed {dashed}, fill {fill}: {off} pixels differ from the object faded as a whole");
+        }
+    }
+
     #[test]
     fn unknown_brush_falls_back_to_plain_stroke_and_scatter_renders() {
         let mut r = Renderer::new();

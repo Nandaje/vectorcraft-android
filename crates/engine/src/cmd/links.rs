@@ -17,16 +17,17 @@
 //! (`links.embed`) and Unembed writes an embedded image to a file it then links to
 //! (`links.unembed`).
 //!
-//! Placed documents ([`PlacedDocument`], VectorCraft documents placed with Link) link to their
-//! files the same way: checking, updating, relinking and finding them on open work alike, and they
-//! are listed. Embed (Break Link) turns one into an editable copy of its art.
+//! Placed documents ([`PlacedDocument`], VectorCraft documents and PDF or `.ai` pages placed with
+//! Link) link to their files the same way: checking, updating, relinking and finding them on open
+//! work alike, and they are listed. Embed (Break Link) turns one into an editable copy of its art.
 
-use std::collections::BTreeMap;
+use std::borrow::Cow;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path};
 
 use serde_json::{Value, json};
 use vectorcraft_doc::links::{Align, Preserve, hash_bytes};
-use vectorcraft_doc::{Appearance, Document, ImageBlob, ImageObject, LinkInfo, Node, NodeId, NodeKind, PlacedDocument, PlacementOptions};
+use vectorcraft_doc::{Appearance, Document, ImageBlob, ImageObject, LinkInfo, Node, NodeId, NodeKind, PageBox, PlacedDocument, PlacementOptions};
 use vectorcraft_geom::{Affine, Rect, shapes};
 
 use super::fileio::{self, RasterImage, absolute_path, file_created, file_stamp, read_file, write_file};
@@ -66,7 +67,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Relink",
             [],
             None,
-            "{ids?: [image or placed document ids] (default: the selected ones; with folder and nothing selected, every missing link), path | folder, copy?: false (with path, for images of a saved document: copy the file into the document's folder and link to the copy; the names Name.png, Name 2.png … Name 99.png are tried in turn until one is free, which gets the copy, or is a file with the same contents, which is used), preserve?: transforms|bounds|fileDimensions|fit|fill (how the new file takes each image's place this time, as links.placementOptions describes; default: each image's Placement Options; fit keeps the new file's aspect ratio inside the old bounds: Replace)} link images (or placed documents, each showing the same artboard of the new file) to the file at path, or each to the file of its link's name in folder; embedded images become linked; each keeps its bounds. One undo step → {relinked: [ids], notFound: [file names], copied?: [{from, to}], kept?: [{from, to}] (with copy)}",
+            "{ids?: [image or placed document ids] (default: the selected ones; with folder and nothing selected, every missing link), path | folder, copy?: false (with path, for images of a saved document: copy the file into the document's folder and link to the copy; the names Name.png, Name 2.png … Name 99.png are tried in turn until one is free, which gets the copy, or is a file with the same contents, which is used), preserve?: transforms|bounds|fileDimensions|fit|fill (how the new file takes each image's place this time, as links.placementOptions describes; default: each image's Placement Options; fit keeps the new file's aspect ratio inside the old bounds: Replace)} link images (or placed documents, each showing the same artboard or page of the new file) to the file at path, or each to the file of its link's name in folder; embedded images become linked; each keeps its bounds. One undo step → {relinked: [ids], notFound: [file names], copied?: [{from, to}], kept?: [{from, to}] (with copy)}",
             has_doc,
             relink
         ),
@@ -111,7 +112,7 @@ pub fn specs() -> Vec<CommandSpec> {
             "Link Info",
             [],
             None,
-            "{id?} an image's or placed document's Link Info (default: the one selected) → image.info's fields (id, name, linked, link, colorMode, pixelWidth, pixelHeight, width, height) and status: ok|modified|missing|embedded, format, ppi: [x, y] (the file's), effectivePpi: [x, y] (at its placed size), scale: [x%, y%] (of its 100% size), rotation (degrees, counter-clockwise), placement: {preserve, align, clip}; linked images also fileName, location (its folder), page?, fileSize? (bytes), modified?, created? (ms since the Unix epoch), refused? (why the path is not followed); a placed document has document: true, pageWidth and pageHeight (pt) instead of pixels, ppi and colorMode, and its scale is of its artboard's 100% size",
+            "{id?} an image's or placed document's Link Info (default: the one selected) → image.info's fields (id, name, linked, link, colorMode, pixelWidth, pixelHeight, width, height) and status: ok|modified|missing|embedded, format, ppi: [x, y] (the file's), effectivePpi: [x, y] (at its placed size), scale: [x%, y%] (of its 100% size), rotation (degrees, counter-clockwise), placement: {preserve, align, clip}; linked images also fileName, location (its folder), page?, fileSize? (bytes), modified?, created? (ms since the Unix epoch), refused? (why the path is not followed); a placed document has document: true, pageWidth and pageHeight (pt) instead of pixels, ppi and colorMode, and its scale is of its artboard's or page's 100% size",
             has_doc,
             info
         ),
@@ -148,21 +149,25 @@ impl Status {
 }
 
 /// The image objects that show one linked file as one content (same path, same image), or the
-/// placed documents that show one artboard of it.
+/// placed documents that show one artboard or page of it.
 struct Group {
     link: LinkInfo,
     key: String,
     /// The objects in the layers (images in symbols and patterns share the content, not an id).
     ids: Vec<NodeId>,
-    /// Placed documents: whether the art's bounds (not the artboard) are shown.
-    document: Option<bool>,
+    /// Placed documents: what they show.
+    document: Option<Shown>,
 }
 
-/// The linked object `n` as (link, content key, placed document's bounding).
-fn linked(n: &Node) -> Option<(&LinkInfo, &str, Option<bool>)> {
+/// What a placed document shows: whether the art's bounds (not the artboard or page) are shown,
+/// and a PDF page's box.
+type Shown = (bool, PageBox);
+
+/// The linked object `n` as (link, content key, what a placed document shows).
+fn linked(n: &Node) -> Option<(&LinkInfo, &str, Option<Shown>)> {
     match &n.kind {
         NodeKind::Image(im) => Some((im.link.as_ref()?, &im.key, None)),
-        NodeKind::PlacedDocument(p) => Some((&p.link, &p.key, Some(p.bounding))),
+        NodeKind::PlacedDocument(p) => Some((&p.link, &p.key, Some((p.bounding, p.page_box)))),
         _ => None,
     }
 }
@@ -177,7 +182,7 @@ pub(crate) fn linked_groups(d: &Document) -> Vec<(String, Vec<u64>)> {
 fn groups(d: &Document, ids: Option<&[NodeId]>) -> Vec<Group> {
     let mut out: Vec<Group> = vec![];
     let mut index: BTreeMap<(String, String, bool), usize> = BTreeMap::new();
-    let mut add = |link: &LinkInfo, key: &str, document: Option<bool>, id: Option<NodeId>| {
+    let mut add = |link: &LinkInfo, key: &str, document: Option<Shown>, id: Option<NodeId>| {
         let i = *index.entry((link.path.clone(), key.to_string(), document.is_some())).or_insert_with(|| {
             out.push(Group { link: link.clone(), key: key.to_string(), ids: vec![], document });
             out.len() - 1
@@ -199,7 +204,7 @@ fn groups(d: &Document, ids: Option<&[NodeId]>) -> Vec<Group> {
                 add(l, &im.key, None, None);
             }
         });
-        d.visit_placed(|_, p| add(&p.link, &p.key, Some(p.bounding), None));
+        d.visit_placed(|_, p| add(&p.link, &p.key, Some((p.bounding, p.page_box)), None));
     }
     out
 }
@@ -282,6 +287,18 @@ fn previewing(d: &Document, key: &str) -> bool {
     d.images.get(key).is_none_or(ImageBlob::is_proxy)
 }
 
+/// A linked raster image whose file is an EPS (Preferences › File Handling › Use Low Resolution
+/// Proxy for Linked EPS).
+fn linked_eps(link: &LinkInfo) -> bool {
+    fileio::format_for_name(link.name()).is_some_and(|f| f.id == "eps")
+}
+
+/// With `low_res_proxy_eps`, a linked EPS image that already shows its saved preview keeps it on
+/// open instead of reading the file again (Update Links still reads modified files).
+fn keep_eps_preview(low_res_proxy_eps: bool, g: &Group, d: &Document) -> bool {
+    low_res_proxy_eps && g.document.is_none() && linked_eps(&g.link) && previewing(d, &g.key)
+}
+
 /// Does group `g` of `d` show something other than its file: an image its preview, a placed
 /// document nothing (its file's bytes are gone)?
 fn stale(d: &Document, g: &Group) -> bool {
@@ -320,6 +337,47 @@ pub(crate) fn linked_files(d: &Document, doc_path: Option<&str>) -> Vec<LinkedFi
         .collect()
 }
 
+/// `d` for output: linked raster images that still show only their saved preview read their files
+/// again (Preferences › Use Low Resolution Proxy for Linked EPS keeps the preview on screen only).
+pub(crate) fn full_linked_images<'a>(d: &'a Document, doc_path: Option<&str>) -> (Cow<'a, Document>, Vec<String>) {
+    let mut keys = BTreeSet::new();
+    d.visit_images(|_, im| {
+        if im.link.is_some() && d.images.get(&im.key).is_some_and(ImageBlob::is_proxy) {
+            keys.insert(im.key.clone());
+        }
+    });
+    if keys.is_empty() {
+        return (Cow::Borrowed(d), vec![]);
+    }
+    let mut out = d.clone();
+    let mut previews = BTreeSet::new();
+    let all = groups(d, None);
+    for key in keys {
+        let Some(g) = all.iter().find(|g| g.document.is_none() && g.key == key) else { continue };
+        let Some(mut f) = locate(&g.link, doc_path) else {
+            previews.insert(key);
+            continue;
+        };
+        let Some(bytes) = f.read().ok() else {
+            previews.insert(key);
+            continue;
+        };
+        let Ok(img) = fileio::raster_image(&bytes) else {
+            previews.insert(key);
+            continue;
+        };
+        let preview = d.images.get(&key).map(|b| b.bytes.clone());
+        let mime = fileio::format_for_name(g.link.name()).map(|f| f.mime.to_string()).unwrap_or_else(|| img.blob.mime.clone());
+        out.images.insert(key, ImageBlob { mime, bytes: img.blob.bytes, proxy: preview });
+    }
+    let mut warnings = vec![];
+    if !previews.is_empty() {
+        warnings
+            .push(format!("{} linked image(s) output as their previews: their files can't be found or read (relink or update them)", previews.len()));
+    }
+    (Cow::Owned(out), warnings)
+}
+
 /// The linked files of the open document `st` that `links.findFiles` looks for, each with the
 /// objects in the layers that show it: the files of objects `ids` whatever their status, else the
 /// files that can't be found.
@@ -334,11 +392,12 @@ pub(crate) fn files_to_find(st: &crate::DocState, ids: Option<&[NodeId]>) -> Vec
 // ---------- reading files into the document ----------
 
 /// Keep `full` (a file's pixels) as image `key` of `d`, unless pixels are there already; a
-/// preview there is kept, and a linked image gets one.
+/// preview there is kept, and a linked image gets one (the one `full` carries, when it has one).
 pub(crate) fn store_image(d: &mut Document, key: &str, full: ImageBlob, linked: bool) {
+    let made = full.proxy.clone().filter(|_| linked);
     let blob = match d.images.get(key) {
         Some(b) if !b.is_proxy() => b.clone(),
-        old => ImageBlob { proxy: old.and_then(|b| b.proxy.clone()), ..full },
+        old => ImageBlob { proxy: old.and_then(|b| b.proxy.clone()).or(made), ..full },
     };
     d.images.insert(key.to_string(), if linked { blob.with_proxy() } else { blob });
 }
@@ -355,16 +414,17 @@ fn read_image(f: &mut Found, base: &LinkInfo) -> Result<FileRead> {
 /// A linked file read for the objects that show it.
 enum Read {
     Image(FileRead),
-    /// A VectorCraft document read for placed documents: the link to it and what they show.
+    /// A VectorCraft document or a PDF or `.ai` file read for placed documents: the link to it and
+    /// what they show.
     Document(LinkInfo, super::place::document::Source),
 }
 
-/// The file at `f` read for group `g`: its image, or the artboard `g` shows.
+/// The file at `f` read for group `g`: its image, or the artboard or page `g` shows.
 fn read_for(f: &mut Found, g: &Group, cmd: &str) -> Result<Read> {
-    let Some(bounding) = g.document else { return read_image(f, &g.link).map(Read::Image) };
+    let Some((bounding, page_box)) = g.document else { return read_image(f, &g.link).map(Read::Image) };
     let bytes = f.read()?;
     let page = g.link.page.unwrap_or(1);
-    let src = super::place::document::source(&f.path, &bytes, Some(&f.path), page, bounding, cmd)?;
+    let src = super::place::document::source(&f.path, &bytes, Some(&f.path), page, bounding, page_box, cmd)?;
     Ok(Read::Document(f.link(&bytes, &g.link), src))
 }
 
@@ -554,11 +614,12 @@ impl Resolved {
 /// away from their path take the new path. A link nothing is known of whose image shows a preview
 /// (a file another app wrote kept only that) was never read: its file is read now, into the
 /// image's bounds, which isn't a change to report. Nothing here is an undo step.
-pub fn resolve(d: &mut Document, doc_path: Option<&str>, update: bool) -> Resolved {
+pub fn resolve(d: &mut Document, doc_path: Option<&str>, update: bool, low_res_proxy_eps: bool) -> Resolved {
     let mut out = Resolved::default();
     for g in groups(d, None) {
         let row = rows(std::iter::once(&g), doc_path);
         let unread = g.document.is_none() && g.link.hash.is_none() && g.link.size.is_none() && previewing(d, &g.key);
+        let eps_preview = keep_eps_preview(low_res_proxy_eps, &g, d);
         match probe(&g, doc_path) {
             (Status::Missing, _) => out.missing.extend(row),
             (Status::Modified, Some(mut f)) if update || unread => {
@@ -593,8 +654,8 @@ pub fn resolve(d: &mut Document, doc_path: Option<&str>, update: bool) -> Resolv
             (Status::Ok, Some(mut f)) => {
                 let preview = previewing(d, &g.key);
                 // Read when the images show the preview, or when the file's details changed.
-                let bytes = if preview || f.bytes.is_some() { f.read().ok() } else { None };
-                if preview {
+                let bytes = if (preview && !eps_preview) || f.bytes.is_some() { f.read().ok() } else { None };
+                if preview && !eps_preview {
                     let Some(img) = bytes.as_deref().and_then(|b| fileio::raster_image(b).ok()) else {
                         out.missing.extend(row);
                         continue;
@@ -834,13 +895,13 @@ fn relink(s: &mut Session, p: &Value) -> Result<Value> {
     let (mut copied, mut kept) = (vec![], vec![]);
     for (ids, path) in files {
         let bytes = read_file(&path)?;
-        // Images show the file; placed documents each show their artboard of it.
+        // Images show the file; placed documents each show their artboard or page of it.
         let mut images = vec![];
-        let mut documents: Vec<((u32, bool), Vec<NodeId>)> = vec![];
+        let mut documents: Vec<((u32, bool, PageBox), Vec<NodeId>)> = vec![];
         for id in ids {
             match st.doc.node(id).map(|n| &n.kind) {
                 Some(NodeKind::PlacedDocument(pl)) => {
-                    let k = (pl.page(), pl.bounding);
+                    let k = (pl.page(), pl.bounding, pl.page_box);
                     match documents.iter_mut().find(|(e, _)| *e == k) {
                         Some((_, ids)) => ids.push(id),
                         None => documents.push((k, vec![id])),
@@ -852,8 +913,8 @@ fn relink(s: &mut Session, p: &Value) -> Result<Value> {
         // Read before it is copied: a file that can't be shown isn't copied.
         let img = if images.is_empty() { None } else { Some(fileio::raster_image(&bytes).map_err(|e| bad(C, format!("{path}: {e}")))?) };
         let mut sources = vec![];
-        for ((page, bounding), ids) in documents {
-            sources.push((page, ids, super::place::document::source(&path, &bytes, Some(&path), page, bounding, C)?));
+        for ((page, bounding, page_box), ids) in documents {
+            sources.push((page, ids, super::place::document::source(&path, &bytes, Some(&path), page, bounding, page_box, C)?));
         }
         let to = match &copy_to {
             Some(dir) => {
@@ -997,10 +1058,12 @@ fn format_label(d: &Document, im: &ImageObject) -> &'static str {
         .map_or("Image", |f| f.label)
 }
 
-/// A placed document's `links.list` fields: `format`, `document: true` and its artboard's size
-/// (`pageWidth`, `pageHeight`, pt) instead of pixels.
+/// A placed document's `links.list` fields: `format` (`VectorCraft`, or the PDF or `.ai` file's
+/// format), `document: true` and its artboard's or page's size (`pageWidth`, `pageHeight`, pt)
+/// instead of pixels.
 fn document_row(p: &PlacedDocument) -> Value {
-    json!({ "format": "VectorCraft", "document": true, "pageWidth": p.width, "pageHeight": p.height })
+    let pdf = fileio::format_for_name(p.link.name()).filter(|f| matches!(f.id, "pdf" | "ai" | "ait"));
+    json!({ "format": pdf.map_or("VectorCraft", |f| f.label), "document": true, "pageWidth": p.width, "pageHeight": p.height })
 }
 
 /// Sort rank of a `links.list` status: missing, modified, ok, embedded.

@@ -1628,7 +1628,7 @@ impl<'p> Builder<'p> {
             return n.clone();
         }
         let data = o.font_data();
-        let name = self.fonts.get(&key).map(|(n, _)| n.clone()).or_else(|| data.as_ref().and_then(|d| d.postscript_name.clone()));
+        let name = self.fonts.get(&key).map(|f| f.name.clone()).or_else(|| data.as_ref().and_then(|d| d.postscript_name.clone()));
         let (weight, italic) = data.as_ref().map_or((None, false), |d| (d.weight, d.is_italic));
         // A subset's six-letter tag.
         let ps = name.as_deref().map(|n| match n.split_once('+') {
@@ -1710,13 +1710,12 @@ impl<'p> Builder<'p> {
             return false;
         }
         let width = o.advance_width().filter(|w| w.is_finite());
-        // Set vertically (WMode 1): no horizontal advance; its em box is a full em wide.
+        // Set vertically (WMode 1): no horizontal advance.
         let upright = width.is_some_and(|w| w.abs() <= 1.0);
-        let top = m * kurbo::Point::new(f64::from(width.filter(|w| *w > 1.0).unwrap_or(1000.0)) * 0.5, 880.0);
         let mut info = self.font_name(key, o);
         // A font the file doesn't carry is drawn with a stand-in: its glyphs can't tell which
         // style of the installed family it is, so the name decides.
-        let embedded = self.fonts.get(&key).is_none_or(|(_, e)| *e);
+        let embedded = self.fonts.get(&key).is_none_or(|f| f.embedded);
         if let Some(face) = &info.face
             && embedded
         {
@@ -1772,8 +1771,17 @@ impl<'p> Builder<'p> {
             stroke,
         };
         let advance = width.map_or(at.size * 0.5, |w| w as f64 / 1000.0 * at.size * at.h_scale / 100.0);
-        let place = |line: &mut TextLine| {
-            if upright { line.push_upright(&look, at, opacity, Upright { top }, &text) } else { line.push(&look, at, opacity, advance, &text) }
+        // A glyph set vertically is drawn from its origin, which the file puts the position
+        // vector's vx (from the font's `W2`, else half its width from `W` or `DW`) to the left of
+        // the column's centre (ISO 32000-1 §9.7.4.3); vertical type centres each glyph on the
+        // column. Half an em only for a full-width glyph (#722).
+        let top = upright.then(|| {
+            let vx = self.fonts.get(&key).and_then(|f| f.vertical.as_ref()).map_or(500.0, |v| v.centre(glyph));
+            m * kurbo::Point::new(vx, 880.0)
+        });
+        let place = |line: &mut TextLine| match top {
+            Some(top) => line.push_upright(&look, at, opacity, Upright { top }, &text),
+            None => line.push(&look, at, opacity, advance, &text),
         };
         self.flush_glyphs();
         // A stroke over the glyph just filled (fill and stroke rendering).

@@ -262,6 +262,8 @@
 	Average…	Ortalama…
 	Axis:	Eksen:
 	Background Color:	Arka Plan Rengi:
+	Show Center Mark	Merkez İşaretini Göster
+	Show Cross Hairs	Artı Çizgilerini Göster
 	Background Contents	Arka Plan İçeriği
 	Background Contents:	Arkaplan İçeriği:
 	Background:	Arka plan:
@@ -2044,7 +2046,7 @@
 	Package	Paket
 	Package collects a saved document with its linked files and fonts.	Paket, kayıtlı bir belgeyi bağlantılı dosyaları ve yazı tipleriyle birlikte toplar.
 	Package created	Paket oluşturuldu
-	Packaged {n} file(s) in {folder}{note}	{folder}{note} biçiminde paketlenmiş {n} dosyası/dosyaları
+	Packaged {n} file(s) in {folder} {note}	{folder}{note} biçiminde paketlenmiş {n} dosyası/dosyaları
 	Packaged {n} file(s){note}	Paketlenmiş {n} dosyası/dosyaları{note}
 	Package…	Paket…
 	Page	Sayfa
@@ -2105,7 +2107,7 @@
 	Percent:	Yüzde:
 	Perceptual Scales	Algısal Ölçekler
 	Performance	Performans
-	Performance & Storage	Performans ve Depolama
+	Plug-ins & Scratch Disks	Eklentiler ve Geçici Diskler
 	Permissions	İzinler
 	Permissions password:	İzin şifresi:
 	Perspective	Perspektif
@@ -2662,6 +2664,7 @@
 	Desired	İstenen
 	Edit Path	Yolu Düzenle
 	Encoding and writing the file…	Dosya kodlanıyor ve yazılıyor…
+	File {n} of {total}	Dosya {n} / {total}
 	Full Justify	Tam Yasla
 	Glyph Scaling:	Glif Ölçekleme:
 	If a drawing tablet's pen doesn't draw, choose an X11 (XWayland) option.	Çizim tabletinin kalemi çizmiyorsa, bir X11 (XWayland) seçeneği belirleyin.
@@ -3408,7 +3411,7 @@
 	Zoom Tool	Yakınlaştırma Aracı
 	Zoom with Mouse Wheel	Fare Tekerleği ile Yakınlaştırma
 	Scrub Numeric Fields by Dragging	Sayısal Alanları Sürükleyerek Fırçalayın
-	{count} file(s) in {folder}{note}. Show the package folder?	{folder}{note} içindeki {count} dosyası/dosyaları. Paket klasörü gösterilsin mi?
+	{count} file(s) in {folder} {note}. Show the package folder?	{folder}{note} içindeki {count} dosyası/dosyaları. Paket klasörü gösterilsin mi?
 	{count} linked file(s) not found	{count} bağlantılı dosya(lar) bulunamadı
 	fonts not copied: {fonts}	kopyalanmayan yazı tipleri: {fonts}
 	{count} linked image(s) changed since this document was saved. Show the new versions?	{count} bağlantılı görseller bu belgenin kaydedilmesinden bu yana değiştirildi. Yeni sürümler gösterilsin mi?
@@ -3596,6 +3599,7 @@ axis	Both	Her İkisi
 @msg	Couldn't copy to the system clipboard: {e}	Sistem panosuna kopyalanamadı: {e}
 @msg	Couldn't open {name}: {e}	{name} açılamadı: {e}
 @msg	Couldn't place {name}: the document it was dropped on was closed	{name} yerleştirilemedi: bırakıldığı belge kapatıldı
+@msg	Couldn't place {name}: the document it was placed in was closed	{name} yerleştirilemedi: yerleştirildiği belge kapatıldı
 @msg	Couldn't read {name}: {e}	{name} okunamadı: {e}
 @msg	Couldn't save recovery data: {e}	Kurtarma verileri kaydedilemedi: {e}
 @msg	Create Outlines: select text objects	Anahatlar Oluştur: metin nesnelerini seçin
@@ -3633,7 +3637,7 @@ axis	Both	Her İkisi
 @msg	Outline Stroke: no stroked paths selected	Anahat Konturu: konturlu yol seçilmedi
 @msg	PDF settings are not an object	PDF ayarları bir nesne değildir
 @msg	PDF writer error: {0}	PDF yazıcı hatası: {0}
-@msg	Packaged {n} file(s) in {folder}{note}	{folder}{note} biçiminde paketlenmiş {n} dosyası/dosyaları
+@msg	Packaged {n} file(s) in {folder} {note}	{folder}{note} biçiminde paketlenmiş {n} dosyası/dosyaları
 @msg	Packaged {n} file(s){note}	Paketlenmiş {n} dosyası/dosyaları{note}
 @msg	Preview in Browser needs the desktop app (the web downloads files instead)	Tarayıcıdaki önizleme için masaüstü uygulaması gerekir (bunun yerine web, dosyaları indirir)
 @msg	Release Guides: no guides	Sürüm Kılavuzları: kılavuz yok
@@ -3836,6 +3840,7 @@ axis	Both	Her İkisi
 @msg	no file system here	burada dosya sistemi yok
 @msg	no file writer	dosya yazarı yok
 @msg	no files to place	yerleştirilecek dosya yok
+@msg	`{file}` isn't a VectorCraft document, a PDF or a PDF-compatible .ai file	`{file}` bir VectorCraft belgesi, bir PDF ya da PDF ile uyumlu bir .ai dosyası değil
 @msg	no format to export to	dışa aktarılacak format yok
 @msg	no free recovery area	ücretsiz kurtarma alanı yok
 @msg	no gradient stop or freeform point is selected	degrade durağı veya serbest biçim noktası seçili değil
@@ -3923,6 +3928,7 @@ axis	Both	Her İkisi
 @msg	path is already closed	yol zaten kapalı
 @msg	paths contain invalid coordinates	yollar geçersiz koordinatlar içeriyor
 @msg	paths: give at least one file	yollar: en az bir dosya verin
+@msg	replace: the object to replace was changed or deleted	değiştir: değiştirilecek nesne değiştirildi veya silindi
 @msg	pattern missing	desen eksik
 @msg	patterns nested too deeply are filled with mid-grey	çok derin iç içe geçmiş desenler orta gri renkle dolu
 @msg	percent must be above 0 and at most 6400, not {p}	yüzde {p} değil, 0'ın üzerinde ve en fazla 6400 olmalıdır
@@ -4108,6 +4114,8 @@ axis	Both	Her İkisi
 @msg	Saving	Kaydediliyor
 @msg	Saving {_1}	{_1} kaydediliyor
 @msg	Exporting {_1}	{_1}'yi dışa aktarma
+@msg	Packaging {_1}	{_1} paketleniyor
+@msg	Placing {_1}	{_1} yerleştiriliyor
 @msg	Saving recovery data for {_1}	{_1} için kurtarma verileri kaydediliyor
 @msg	Discarded {_1} recovered document(s)	Atılan {_1} kurtarılan belge(ler)
 @msg	Restored {_1} recovered document(s): save them to keep them	Geri yüklenen {_1} kurtarılan belge(ler): saklamak için bunları kaydedin
@@ -4223,7 +4231,9 @@ axis	Both	Her İkisi
 @msg	automation filesystem access is not granted: read authority is absent: {path}	otomasyon dosya sistemine erişim izni verilmedi: okuma yetkisi yok: {path}
 @msg	automation filesystem access is not granted: write authority is absent: {path}	otomasyon dosya sistemine erişim izni verilmedi: yazma yetkisi yok: {path}
 @msg	automation path rejected: outside the read root {root}: {path}	otomasyon yolu reddedildi: okuma kökünün dışında {root}: {path}
+@msg	automation path rejected: outside the read roots {roots}: {path}	otomasyon yolu reddedildi: okuma köklerinin dışında {roots}: {path}
 @msg	automation path rejected: outside the write root {root}: {path}	otomasyon yolu reddedildi: yazma kökünün dışında {root}: {path}
+@msg	automation path rejected: outside the write roots {roots}: {path}	otomasyon yolu reddedildi: yazma köklerinin dışında {roots}: {path}
 @msg	automation path rejected: path is empty	otomasyon yolu reddedildi: yol boş
 @msg	automation path rejected: a link that leads nowhere: {path}	otomasyon yolu reddedildi: hiçbir yere gitmeyen bağlantı: {path}
 @msg	automation path rejected: cannot resolve {path}: {e}	otomasyon yolu reddedildi: {path} çözülemiyor: {e}
@@ -5172,6 +5182,7 @@ theme	Appearance	Görünüm
 @msg	select an Objects on Path group	bir Yol Üzerindeki Nesneler grubu seçin
 @msg	the Simplify slider is not open	Basitleştirme kaydırıcısı açık değil
 @msg	{_1} is an exporter (File › Export › Export As…)	{_1} bir dışa aktarma eklentisidir (Dosya › Dışa Aktar › Farklı Dışa Aktar…)
+@msg	`documentData` is {size} bytes (limit {MAX_DOCUMENT_DATA})	`documentData` {size} bayt (sınır {MAX_DOCUMENT_DATA})
 	Alt key toggles to Smooth Tool	Alt tuşu Düzleştirme Aracına geçiş yapar
 	Auto-Simplify	Otomatik Basitleştir
 	Drag an item here, or right-click one, to put it in this group.	Bu gruba eklemek için bir öğeyi buraya sürükleyin veya sağ tıklayın.
@@ -5255,6 +5266,7 @@ theme	Appearance	Görünüm
 	Diffuse	Yayılma
 	Eyedropper: click the art to sample the key color	Damlalık: anahtar rengi örneklemek için çizime tıklayın
 	Highlight:	Vurgu:
+	In Merge Mode, Clicking Stroke Splits the Path	Birleştirme modunda kontura tıklamak yolu böler
 	Insert Kashidas	Keşide Ekle
 	Load Variable Library…	Değişken Kitaplığı Yükle…
 	Long	Uzun
@@ -5266,6 +5278,7 @@ theme	Appearance	Görünüm
 	Selection:	Seçim:
 	Standard	Standart
 	Straight Line	Düz Çizgi
+	Stroke When Editable	Düzenlenebilir olduğunda kontur
 	Stylistic	Biçimsel
 	The art keeps its own colors.	Çizim kendi renklerini korur.
 	The key color becomes the stroke color. The other colors shift their hue by the same amount and keep their saturation and brightness.	Anahtar renk kontur rengi olur. Diğer renkler aynı miktarda renk tonu kaydırır ve doygunluk ile parlaklıklarını korur.
@@ -5328,6 +5341,10 @@ theme	Appearance	Görünüm
 3d	Light	Işık
 	Torn Edges…	Yırtık Kenarlar…
 	Torn Edges	Yırtık Kenarlar
+	Conté Crayon…	Conté Kalemi…
+	Conté Crayon	Conté Kalemi
+	Foreground Level	Ön plan düzeyi
+	Background Level	Arka plan düzeyi
 	Brush Size	Fırça Boyutu
 	Texture Coverage	Doku Kapsamı
 	Definition	Tanım
@@ -5361,8 +5378,48 @@ theme	Appearance	Görünüm
 	Fresco	Fresk
 	Effect Gallery…	Efekt Galerisi…
 	Effect Gallery Dialog	Efekt Galerisi İletişim Kutusu
+	Arc Segment Tool Options	Yay Segmenti Aracı Seçenekleri
+	Base Along:	Taban boyunca:
+	Closed	Kapalı
+	Convex	dışbükey
+	Fill Arc	Yayı doldur
+	Length X-Axis:	X ekseni uzunluğu:
+	Length Y-Axis:	Y ekseni uzunluğu:
+	Slope:	Eğim:
+axis	X Axis	X ekseni
+axis	Y Axis	Y ekseni
 
+@msg	Packaged {n} file(s) in {folder}	{folder} biçiminde paketlenmiş {n} dosyası/dosyaları
+@msg	Packaged {n} file(s) {note}	Paketlenmiş {n} dosyası/dosyaları {note}
+@msg	Packaged {n} file(s)	Paketlenmiş {n} dosyası/dosyaları
 # Artwork drag between document tabs.
 	Drop Artwork	Çizimi Bırak
 @msg	{key} must be [x, y] with finite coordinates	{key}, sonlu koordinatlı [x, y] olmalı
 @msg	ids must contain 1–10000 object ids	ids 1–10000 nesne kimliği içermeli
+	Packaged {n} file(s)	Paketlenmiş {n} dosyası/dosyaları
+	Packaged {n} file(s) in {folder}	{folder} biçiminde paketlenmiş {n} dosyası/dosyaları
+	Packaged {n} file(s) {note}	Paketlenmiş {n} dosyası/dosyaları {note}
+	{count} file(s) in {folder}. Show the package folder?	{folder} içindeki {count} dosyası/dosyaları. Paket klasörü gösterilsin mi?
+	Clockwise	Saat yönünde
+	Dither	Titreme
+	Fine noise hides banding in the gradient fill	İnce gürültü, degrade dolgudaki bantları gizler
+@msg	`dither` applies to gradient fills (stroke: false)	`dither` degrade dolgulara uygulanır (stroke: false)
+@msg	`dither` applies to gradient fills (paint.setFill)	`dither` degrade dolgulara uygulanır (paint.setFill)
+@msg	`dither` must be true or false	"dither" doğru veya yanlış olmalıdır
+	Snapping	Yaslama
+	Snap to Tangent	Teğete Yasla
+	Snap to Perpendicular	Dikeye Yasla
+	Geometric Guides	Geometrik Kılavuzlar
+@msg	`method` must be classic or perceptual	`method` classic veya perceptual olmalıdır
+# Heavy plug-in filters (plugin.inspect, plug-in runs)
+	Install “{name}”, which asks for a heavy budget?	Büyük bir hesaplama bütçesi isteyen “{name}” yüklensin mi?
+	Each run may take up to {minutes} minutes and do {times} times the work other plug-ins may. It runs in the background, and you can cancel it.	Her çalıştırma {minutes} dakikaya kadar sürebilir ve diğer eklentilere izin verilen işin {times} katını yapabilir. Arka planda çalışır ve iptal edebilirsiniz.
+	It may take minutes, so it runs in the background, where you can cancel it.	Dakikalar sürebileceği için arka planda çalışır; orada iptal edebilirsiniz.
+	The plug-in is computing…	Eklenti hesaplıyor…
+	Inspect Plug-in	Eklentiyi İncele
+	Cancel Plug-in Run	Eklenti Çalıştırmasını İptal Et
+@msg	{_1} finished, but the document or the plug-in changed meanwhile: run it again	{_1} bitti, ancak bu sırada belge veya eklenti değişti: yeniden çalıştırın
+@msg	Running “{name}”…	“{name}” çalıştırılıyor…
+@msg	a live effect runs while the document is drawn, so it can't be `heavy`	canlı efekt belge çizilirken çalışır, bu yüzden `heavy` olamaz
+@msg	an exporter always gets an export's budget: leave `budget` out	dışa aktarma eklentisi her zaman bir dışa aktarmanın bütçesini alır: `budget` anahtarını çıkarın
+@msg	“{_1}” asks for a heavy budget (each run up to {minutes} minutes and {times} times the usual instructions): install it with `allowHeavy: true` once the user agrees	“{_1}” büyük bir hesaplama bütçesi istiyor (her çalıştırma en fazla {minutes} dakika ve olağan komutların {times} katı): kullanıcı onayladıktan sonra `allowHeavy: true` ile yükleyin

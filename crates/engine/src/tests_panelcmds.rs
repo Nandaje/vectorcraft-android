@@ -352,6 +352,28 @@ fn duplicate_artboards_copies_every_selected_artboard_in_one_step() {
     }
 }
 
+/// #2103: with the Artboard tool, an arrow key moves the selected artboards and the art on them by
+/// the keyboard increment (Shift: ten times as far) in one undo step each; the selected art
+/// doesn't move on its own.
+#[test]
+fn artboard_tool_arrow_keys_move_the_selected_artboards_with_their_art() {
+    use vectorcraft_tools::{Mods, ToolKey};
+    let mut s = session();
+    let [a, b, c] = two_selected_artboards(&mut s);
+    s.execute("prefs.set", &json!({"key": "keyboardIncrement", "value": 4})).unwrap();
+    let v = ViewInfo::default();
+    assert!(s.tool_claims_key(ToolKey::Right, v));
+    let undo = s.doc().unwrap().history.undo.len();
+    s.tool_key(ToolKey::Right, Mods::default(), v).unwrap();
+    s.tool_key(ToolKey::Right, Mods { shift: true, ..Mods::default() }, v).unwrap();
+    let xs = |s: &Session| boards(s).into_iter().map(|(x, _)| x).collect::<Vec<_>>();
+    assert_eq!(xs(&s), [44.0, 1044.0, 0.0]);
+    assert_eq!([left(&s, a), left(&s, b), left(&s, c)], [54.0, 1054.0, 10.0], "the art moves with its artboard");
+    assert_eq!(s.doc().unwrap().history.undo.len(), undo + 2, "one step per press");
+    s.execute("edit.undo", &json!({})).unwrap();
+    assert_eq!((xs(&s), left(&s, a)), (vec![4.0, 1004.0, 0.0], 14.0));
+}
+
 /// With the Artboard tool, Copy takes every selected artboard and the art on each (the public Cut,
 /// copy, and paste artboards page). Paste adds a copy of each with its art in one undo step,
 /// together right of the last artboard; Paste in Place puts them where they were. The tool then
@@ -804,6 +826,109 @@ fn artboard_lock_round_trips_through_the_native_format() {
     assert_eq!(back.artboards, s.doc().unwrap().doc.artboards);
     s.execute("artboard.setProps", &json!({"index": 1, "locked": false})).unwrap();
     assert_eq!(save(&s), before);
+}
+
+/// Artboard Options' Show Center Mark and Show Cross Hairs: `artboard.setProps {showCenterMark,
+/// showCrossHairs}` sets and clears each on that artboard only, in one undo step, also for a
+/// locked artboard and in an `artboards` list. A change without them leaves them, a duplicate
+/// keeps them, `artboard.new` takes them, `inspect_document` reports them, and a value that isn't
+/// true or false is refused.
+#[test]
+fn artboard_display_marks_are_set_and_cleared_in_one_undo_step() {
+    let mut s = session();
+    s.execute("artboard.new", &json!({})).unwrap();
+    let marks = |s: &Session, i: usize| {
+        let a = &s.doc().unwrap().doc.artboards[i];
+        (a.show_center_mark, a.show_cross_hairs)
+    };
+    let undo = |s: &Session| s.doc().unwrap().history.undo.len();
+    let u0 = undo(&s);
+    s.execute("artboard.setProps", &json!({"index": 1, "showCenterMark": true})).unwrap();
+    assert_eq!((marks(&s, 0), marks(&s, 1)), ((false, false), (true, false)), "only that artboard");
+    s.execute("artboard.setProps", &json!({"index": 1, "showCrossHairs": true, "showCenterMark": false})).unwrap();
+    assert_eq!(marks(&s, 1), (false, true));
+    s.execute("artboard.setProps", &json!({"index": 1, "name": "Marked"})).unwrap();
+    assert_eq!(marks(&s, 1), (false, true), "a change without them leaves them");
+    assert_eq!(undo(&s), u0 + 3, "one undo step each");
+    for was in [(false, true), (true, false), (false, false)] {
+        s.execute("edit.undo", &json!({})).unwrap();
+        assert_eq!(marks(&s, 1), was);
+    }
+    s.execute("edit.redo", &json!({})).unwrap();
+    assert_eq!(marks(&s, 1), (true, false));
+    // A locked artboard keeps its rectangle, not its display marks.
+    s.execute("artboard.setProps", &json!({"index": 0, "locked": true})).unwrap();
+    s.execute("artboard.setProps", &json!({"index": 0, "showCrossHairs": true})).unwrap();
+    assert_eq!(marks(&s, 0), (false, true));
+    let u = undo(&s);
+    s.execute(
+        "artboard.setProps",
+        &json!({"artboards": [{"index": 0, "showCenterMark": true}, {"index": 1, "showCenterMark": false, "showCrossHairs": true}]}),
+    )
+    .unwrap();
+    assert_eq!((marks(&s, 0), marks(&s, 1)), ((true, true), (false, true)), "each listed artboard takes its own");
+    assert_eq!(undo(&s), u + 1, "in one undo step");
+    let doc = crate::inspect::document(&s);
+    assert_eq!((doc["artboards"][0]["showCenterMark"].clone(), doc["artboards"][1]["showCrossHairs"].clone()), (json!(true), json!(true)));
+    assert!(doc["artboards"][1].get("showCenterMark").is_none(), "{doc}");
+    let copy = s.execute("artboard.duplicate", &json!({"index": 1})).unwrap()["index"].as_u64().unwrap() as usize;
+    assert_eq!(marks(&s, copy), (false, true), "a duplicate keeps them");
+    let made = s.execute("artboard.new", &json!({"showCenterMark": true})).unwrap()["index"].as_u64().unwrap() as usize;
+    assert_eq!(marks(&s, made), (true, false), "a new artboard takes them too");
+    let plain = s.execute("artboard.new", &json!({})).unwrap()["index"].as_u64().unwrap() as usize;
+    assert_eq!(marks(&s, plain), (false, false));
+    let before = s.doc().unwrap().doc.clone();
+    assert!(s.execute("artboard.setProps", &json!({"index": 1, "showCenterMark": "yes"})).is_err());
+    assert!(
+        s.execute("artboard.setProps", &json!({"artboards": [{"index": 0, "showCenterMark": false}, {"index": 1, "showCrossHairs": 1}]})).is_err()
+    );
+    assert!(s.execute("artboard.new", &json!({"showCrossHairs": "yes"})).is_err());
+    assert_eq!(*s.doc().unwrap().doc, *before, "a bad value changes nothing");
+}
+
+/// The native format keeps Show Center Mark and Show Cross Hairs. A document that never shows them
+/// is written byte for byte as before they could be set, and a file written without the two keys
+/// opens with both off.
+#[test]
+fn artboard_display_marks_round_trip_through_the_native_format() {
+    let mut s = session();
+    s.execute("artboard.new", &json!({})).unwrap();
+    let save = |s: &Session| vectorcraft_format::save(&s.doc().unwrap().doc, false);
+    let before = save(&s);
+    s.execute("artboard.setProps", &json!({"artboards": [{"index": 0, "showCenterMark": true}, {"index": 1, "showCrossHairs": true}]})).unwrap();
+    let bytes = save(&s);
+    let saved: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    let ab = |i: usize| saved["document"]["artboards"][i].clone();
+    assert_eq!((ab(0)["show_center_mark"].clone(), ab(0)["show_cross_hairs"].clone()), (json!(true), json!(false)));
+    assert_eq!((ab(1)["show_center_mark"].clone(), ab(1)["show_cross_hairs"].clone()), (json!(false), json!(true)));
+    let back = vectorcraft_format::load(&bytes).unwrap();
+    assert_eq!(back.artboards, s.doc().unwrap().doc.artboards);
+    s.execute("artboard.setProps", &json!({"artboards": [{"index": 0, "showCenterMark": false}, {"index": 1, "showCrossHairs": false}]})).unwrap();
+    assert_eq!(save(&s), before, "off again, the file is as it was");
+    // A file whose artboards have no such keys (older writers) opens with both off.
+    let mut old: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    for a in old["document"]["artboards"].as_array_mut().unwrap() {
+        let a = a.as_object_mut().unwrap();
+        a.remove("show_center_mark");
+        a.remove("show_cross_hairs");
+    }
+    let back = vectorcraft_format::load(&serde_json::to_vec(&old).unwrap()).unwrap();
+    assert!(back.artboards.iter().all(|a| !a.show_center_mark && !a.show_cross_hairs));
+}
+
+/// Show Center Mark and Show Cross Hairs are screen-only: SVG and PDF exports (and print, which
+/// prints the PDF) come out the same with them on as with them off.
+#[test]
+fn artboard_display_marks_stay_out_of_exports() {
+    let mut s = session();
+    rect(&mut s);
+    let doc = |s: &Session| (*s.doc().unwrap().doc).clone();
+    let off = doc(&s);
+    s.execute("artboard.setProps", &json!({"index": 0, "showCenterMark": true, "showCrossHairs": true})).unwrap();
+    let on = doc(&s);
+    assert_ne!(on.artboards, off.artboards);
+    assert_eq!(vectorcraft_svg::export(&on, &Default::default()), vectorcraft_svg::export(&off, &Default::default()));
+    assert_eq!(crate::export_pdf(&on, &Default::default()).unwrap(), crate::export_pdf(&off, &Default::default()).unwrap());
 }
 
 #[test]

@@ -716,7 +716,7 @@
 	Units	Satuan
 	Guides & Grid	Panduan & kisi
 	Hyphenation	Pemenggalan kata
-	Performance & Storage	Kinerja & penyimpanan
+	Plug-ins & Scratch Disks	Plug-in & Disk scratch
 	User Interface	Antarmuka pengguna
 	Performance	Kinerja
 	File Handling	Penanganan berkas
@@ -2184,11 +2184,11 @@ lighting	Light	Cahaya
 	Fonts whose licence doesn't allow embedding are not copied.	Font yang lisensinya tidak mengizinkan penyematan tidak disalin.
 	Package collects a saved document with its linked files and fonts.	Package mengumpulkan dokumen tersimpan beserta file dan font yang tertaut.
 	Package created	Paket dibuat
-	Packaged {n} file(s) in {folder}{note}	{n} file dipaketkan dalam {folder}{note}
+	Packaged {n} file(s) in {folder} {note}	{n} file dipaketkan dalam {folder}{note}
 	Packaged {n} file(s){note}	{n} file dipaketkan{note}
 	Relink Linked Files to the Document	Tautkan ulang file tertaut ke dokumen
 	Save the document first?	Simpan dokumen terlebih dahulu?
-	{count} file(s) in {folder}{note}. Show the package folder?	{count} file dalam {folder}{note}. Tampilkan folder paket?
+	{count} file(s) in {folder} {note}. Show the package folder?	{count} file dalam {folder}{note}. Tampilkan folder paket?
 	{count} linked file(s) not found	{count} file tertaut tidak ditemukan
 	fonts not copied: {fonts}	font tidak disalin: {fonts}
 	Built-in presets are read-only: New… starts an editable copy.	Preset bawaan bersifat hanya-baca: Baru… memulai salinan yang dapat diedit.
@@ -2235,6 +2235,8 @@ lighting	Light	Cahaya
 	File Dimensions	Dimensi file
 	Transforms	Transformasi
 	Background Color:	Warna latar belakang:
+	Show Center Mark	Tampilkan tanda tengah
+	Show Cross Hairs	Tampilkan garis silang
 	Client-side (.html)	Sisi klien (.html)
 	Color Reduction:	Reduksi warna:
 	Lossless (lossy WebP isn't available yet)	Tanpa kehilangan (WebP lossy belum tersedia)
@@ -3825,6 +3827,7 @@ imageTrace	Outline	Kontur
 @msg	Couldn't copy to the system clipboard: {e}	Tidak dapat menyalin ke papan klip sistem: {e}
 @msg	Couldn't open {name}: {e}	Tidak dapat membuka {name}: {e}
 @msg	Couldn't place {name}: the document it was dropped on was closed	Tidak dapat menempatkan {name}: dokumen tempatnya dijatuhkan sudah ditutup
+@msg	Couldn't place {name}: the document it was placed in was closed	Tidak dapat menempatkan {name}: dokumen tempatnya ditempatkan sudah ditutup
 @msg	Couldn't read {name}: {e}	Tidak dapat membaca {name}: {e}
 @msg	Couldn't save recovery data: {e}	Tidak dapat menyimpan data pemulihan: {e}
 @msg	Create Outlines: select text objects	Buat kontur: pilih objek teks
@@ -3862,7 +3865,7 @@ imageTrace	Outline	Kontur
 @msg	Outline Stroke: no stroked paths selected	Ubah goresan menjadi kontur: tidak ada jalur dengan goresan yang dipilih
 @msg	PDF settings are not an object	Pengaturan PDF bukan objek
 @msg	PDF writer error: {0}	Kesalahan penulis PDF: {0}
-@msg	Packaged {n} file(s) in {folder}{note}	Berhasil mengemas {n} file di {folder}{note}
+@msg	Packaged {n} file(s) in {folder} {note}	Berhasil mengemas {n} file di {folder}{note}
 @msg	Packaged {n} file(s){note}	Berhasil mengemas {n} file{note}
 @msg	Preview in Browser needs the desktop app (the web downloads files instead)	Pratinjau di Peramban memerlukan aplikasi desktop (versi web mengunduh file sebagai gantinya)
 @msg	Release Guides: no guides	Lepaskan panduan: tidak ada panduan
@@ -4168,6 +4171,7 @@ imageTrace	Outline	Kontur
 @msg	path is already closed	jalur sudah tertutup
 @msg	paths contain invalid coordinates	jalur berisi koordinat yang tidak valid
 @msg	paths: give at least one file	jalur: berikan setidaknya satu berkas
+@msg	replace: the object to replace was changed or deleted	ganti: objek yang akan diganti telah diubah atau dihapus
 @msg	pattern missing	pola hilang
 @msg	patterns nested too deeply are filled with mid-grey	pola yang bersarang terlalu dalam diisi dengan abu-abu tengah
 @msg	percent must be above 0 and at most 6400, not {p}	persen harus di atas 0 dan paling banyak 6400, bukan {p}
@@ -4352,6 +4356,8 @@ imageTrace	Outline	Kontur
 @msg	Saving	Menyimpan
 @msg	Saving {_1}	Menyimpan {_1}
 @msg	Exporting {_1}	Mengekspor {_1}
+@msg	Packaging {_1}	Mengemas {_1}
+@msg	Placing {_1}	Menempatkan {_1}
 @msg	Saving recovery data for {_1}	Menyimpan data pemulihan untuk {_1}
 @msg	Discarded {_1} recovered document(s)	{_1} dokumen hasil pemulihan dibuang
 @msg	Restored {_1} recovered document(s): save them to keep them	{_1} dokumen hasil pemulihan dipulihkan: simpan agar tidak hilang
@@ -4434,7 +4440,9 @@ imageTrace	Outline	Kontur
 @msg	automation filesystem access is not granted: read authority is absent: {path}	akses sistem berkas otomatisasi tidak diberikan: otoritas baca tidak ada: {path}
 @msg	automation filesystem access is not granted: write authority is absent: {path}	akses sistem berkas otomatisasi tidak diberikan: otoritas tulis tidak ada: {path}
 @msg	automation path rejected: outside the read root {root}: {path}	jalur otomatisasi ditolak: di luar akar baca {root}: {path}
+@msg	automation path rejected: outside the read roots {roots}: {path}	jalur otomatisasi ditolak: di luar akar-akar baca {roots}: {path}
 @msg	automation path rejected: outside the write root {root}: {path}	jalur otomatisasi ditolak: di luar akar tulis {root}: {path}
+@msg	automation path rejected: outside the write roots {roots}: {path}	jalur otomatisasi ditolak: di luar akar-akar tulis {roots}: {path}
 @msg	automation path rejected: path is empty	jalur otomatisasi ditolak: jalur kosong
 @msg	automation path rejected: a link that leads nowhere: {path}	jalur otomatisasi ditolak: tautan yang tidak mengarah ke mana pun: {path}
 @msg	automation path rejected: cannot resolve {path}: {e}	jalur otomatisasi ditolak: tidak dapat menyelesaikan {path}: {e}
@@ -5137,17 +5145,23 @@ swatch	Bright Violet	Violet cerah
 @msg	no saved selection recalled	tidak ada seleksi tersimpan yang dipanggil
 	Merge only with selection	Gabungkan hanya dengan seleksi
 	Consider Open Filled Paths as Closed	Anggap jalur terbuka yang terisi sebagai tertutup
+	In Merge Mode, Clicking Stroke Splits the Path	Dalam mode gabung, mengeklik stroke memisahkan jalur
 	Pick Color From:	Ambil warna dari:
 	Artwork	Karya seni
 	Cursor Swatch Preview	Pratinjau swatch di kursor
 	Selection:	Seleksi:
 	Straight Line	Garis lurus
 	Highlight:	Sorotan:
+	Stroke When Editable	Stroke saat dapat diedit
 	Sketch	Sketsa
 	Halftone Pattern…	Pola halftone…
 	Halftone Pattern	Pola halftone
 	Torn Edges…	Tepi robek…
 	Torn Edges	Tepi robek
+	Conté Crayon…	Krayon Conté…
+	Conté Crayon	Krayon Conté
+	Foreground Level	Tingkat latar depan
+	Background Level	Tingkat latar belakang
 	Pattern Type	Jenis pola
 	Dot	Titik
 	Export Type:	Jenis ekspor:
@@ -5294,8 +5308,13 @@ swatch	Bright Violet	Violet cerah
 	Persistent	Persisten
 	Locate Library…	Temukan pustaka…
 	Library Panel Options	Opsi panel pustaka
+	Snapping	Snap
+	Snap to Tangent	Snap ke garis singgung
+	Snap to Perpendicular	Snap tegak lurus
+@msg	unknown snap option `{key}` (use {options})	opsi snap `{key}` tidak dikenal (gunakan {options})
 	Gap Length:	Panjang celah:
 	Artboard {n} of {total}	Artboard {n} dari {total}
+	File {n} of {total}	Berkas {n} dari {total}
 	Encoding and writing the file…	Mengodekan dan menulis berkas…
 @plural	{n} more export waiting|{n} more exports waiting	{n} ekspor lagi menunggu
 	Continue in Background	Lanjutkan di latar belakang
@@ -5364,6 +5383,7 @@ swatch	Bright Violet	Violet cerah
 	Water Paper	Kertas Basah
 	Ruby…	Ruby…
 	Ruby	Ruby
+	Geometric Guides	Panduan Geometris
 	Ease In	Awal Lambat
 	Ease Out	Akhir Lambat
 	Ease In Out	Awal dan Akhir Lambat
@@ -5374,3 +5394,34 @@ swatch	Bright Violet	Violet cerah
 	Fresco	Fresko
 	Effect Gallery…	Galeri Efek…
 	Effect Gallery Dialog	Dialog Galeri Efek
+	Arc Segment Tool Options	Opsi alat segmen busur
+	Base Along:	Dasar sepanjang:
+	Closed	Tertutup
+	Convex	Cembung
+	Fill Arc	Isi busur
+	Length X-Axis:	Panjang sumbu X:
+	Length Y-Axis:	Panjang sumbu Y:
+	Slope:	Kemiringan:
+axis	X Axis	Sumbu X
+axis	Y Axis	Sumbu Y
+@msg	Packaged {n} file(s) in {folder}	Berhasil mengemas {n} file di {folder}
+@msg	Packaged {n} file(s) {note}	Berhasil mengemas {n} file {note}
+@msg	Packaged {n} file(s)	Berhasil mengemas {n} file
+	Packaged {n} file(s)	Berhasil mengemas {n} file
+	Packaged {n} file(s) in {folder}	Berhasil mengemas {n} file di {folder}
+	Packaged {n} file(s) {note}	Berhasil mengemas {n} file {note}
+	{count} file(s) in {folder}. Show the package folder?	{count} file dalam {folder}. Tampilkan folder paket?
+	Clockwise	Searah jarum jam
+	Dither	Dither
+	Fine noise hides banding in the gradient fill	Derau halus menyembunyikan pita warna pada isian gradien
+@msg	`dither` applies to gradient fills (stroke: false)	`dither` berlaku untuk isian gradien (stroke: false)
+@msg	`dither` applies to gradient fills (paint.setFill)	`dither` berlaku untuk isian gradien (paint.setFill)
+@msg	`dither` must be true or false	`dither` harus true atau false
+@msg	`method` must be classic or perceptual	`method` harus classic atau perceptual
+# Heavy plug-in filters (plugin.inspect, plug-in runs)
+	Install “{name}”, which asks for a heavy budget?	Instal “{name}”, yang meminta anggaran komputasi besar?
+	Each run may take up to {minutes} minutes and do {times} times the work other plug-ins may. It runs in the background, and you can cancel it.	Setiap kali dijalankan, plug-in ini bisa memakan waktu hingga {minutes} menit dan melakukan {times} kali pekerjaan yang diizinkan untuk plug-in lain. Plug-in ini berjalan di latar belakang, dan Anda dapat membatalkannya.
+	It may take minutes, so it runs in the background, where you can cancel it.	Ini bisa memakan waktu beberapa menit, jadi berjalan di latar belakang, tempat Anda dapat membatalkannya.
+	The plug-in is computing…	Plug-in sedang menghitung…
+	Inspect Plug-in	Periksa plug-in
+	Cancel Plug-in Run	Batalkan jalannya plug-in

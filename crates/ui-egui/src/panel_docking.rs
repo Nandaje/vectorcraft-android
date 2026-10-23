@@ -771,10 +771,11 @@ impl craft_ui::docking::DockContent<String> for PanelContent<'_> {
         if crate::state::DockTab::from_id(panel).is_some() {
             crate::dock::panel_body(self.app, ui, panel, width, height);
         } else {
-            egui::ScrollArea::vertical()
-                .id_salt(("shared-panel-body", panel))
-                .auto_shrink([false, false])
-                .show(ui, |ui| crate::dock::panel_body(self.app, ui, panel, width, height));
+            // The body is as wide as the scroll area leaves it beside its scroll bar.
+            crate::widgets::panel_scroll(ui, egui::ScrollArea::vertical().id_salt(("shared-panel-body", panel)).auto_shrink([false, false]), |ui| {
+                let width = ui.available_width();
+                crate::dock::panel_body(self.app, ui, panel, width, height)
+            });
         }
     }
 
@@ -1205,7 +1206,7 @@ fn icon_rail(app: &mut VectorcraftApp, ui: &mut egui::Ui) {
         .frame(egui::Frame::NONE)
         .show(ui, |ui| {
             crate::theme::card(ui, &t, egui::Margin { left: 3, right: 3, top: 6, bottom: 6 }, |ui| {
-                egui::ScrollArea::vertical().id_salt("shared-panel-icons-scroll").show(ui, |ui| {
+                crate::widgets::strip_scroll(ui, "shared-panel-icons-scroll", |ui| {
                     ui.spacing_mut().item_spacing.y = 2.0;
                     // The tabbed group's panels dropped on the column head it, then the icon panels,
                     // then the other panels dropped on it (those the column has no place for).

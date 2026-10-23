@@ -51,7 +51,7 @@ fn transparent_stops_blend_colour_and_opacity_apart() {
             (GradientKind::Linear, GradientGeom { start: Point::new(0.0, 50.0), end: Point::new(100.0, 50.0), aspect: 1.0, focal: None }),
             (GradientKind::Radial, GradientGeom { start: Point::new(50.0, 50.0), end: Point::new(100.0, 50.0), aspect: 1.0, focal: None }),
         ] {
-            let gradient = Gradient { kind, stops: stops.clone() };
+            let gradient = Gradient::new(kind, stops.clone());
             assert_follows_model(&render_view(&filled(&gradient, geom), 100, 100), &gradient, &geom);
         }
     }

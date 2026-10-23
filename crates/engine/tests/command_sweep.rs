@@ -378,6 +378,10 @@ fn structured_junk() {
             json!({"effect": "artistic.roughPastels", "params": {"strokeLength": 1e308, "strokeDetail": "NaN", "texture": -1e308, "scaling": "bad", "lightDirection": "nope"}}),
         ),
         ("effect.apply", json!({"effect": "sketch.chrome", "params": {"detail": -1e308, "smoothness": "NaN"}})),
+        (
+            "effect.apply",
+            json!({"effect": "sketch.conteCrayon", "params": {"foregroundLevel": "NaN", "backgroundLevel": 1e308, "texture": [1], "scaling": -1e308, "relief": "1e999", "lightDirection": 3, "invert": "yes"}}),
+        ),
         ("effect.apply", json!({"effect": "sketch.graphicPen", "params": {"strokeLength": -1e308, "lightDarkBalance": "NaN", "strokeDirection": 3}})),
         ("effect.apply", json!({"effect": "sketch.halftonePattern", "params": {"size": -1e308, "contrast": "NaN", "patternType": 3}})),
         ("effect.apply", json!({"effect": "sketch.basRelief", "params": {"detail": "NaN", "smoothness": 1e308, "lightDirection": 3}})),

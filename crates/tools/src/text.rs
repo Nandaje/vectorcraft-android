@@ -283,7 +283,17 @@ impl TypeTool {
         let was_editing = self.editing.is_some_and(|id| Self::text(cx, id).is_some());
         let mut out = self.finish(cx);
         let drag = self.drag.take();
-        let area = drag.map(|d| Rect::from_points(at, d)).filter(|r| r.width() > cx.tol(6.0) && r.height() > cx.tol(6.0));
+        // New type is set along General › Constrain Angle's axes (none at 0° or a whole turn): an
+        // area's box measured along them, turned about its top-left corner, point type about its
+        // first baseline's start.
+        let axes = vectorcraft_geom::constrain_axes(cx.constrain_angle);
+        let back = axes.map(|a| a.inverse());
+        let area = drag
+            .map(|d| match back {
+                Some(b) => Rect::from_points(b * at, b * d),
+                None => Rect::from_points(at, d),
+            })
+            .filter(|r| r.width() > cx.tol(6.0) && r.height() > cx.tol(6.0));
         if was_editing && area.is_none() {
             return out;
         }
@@ -301,9 +311,15 @@ impl TypeTool {
             }
         }
         let mut params = match area {
-            Some(r) => json!({"x": r.x0, "y": r.y0, "text": "", "area": {"width": r.width(), "height": r.height()}}),
+            Some(r) => {
+                let o = axes.map_or(r.origin(), |a| a * r.origin());
+                json!({"x": o.x, "y": o.y, "text": "", "area": {"width": r.width(), "height": r.height()}})
+            }
             None => json!({"x": at.x, "y": at.y, "text": ""}),
         };
+        if let Some(rotation) = vectorcraft_geom::constrain_rotation(cx.constrain_angle) {
+            params["rotation"] = json!(rotation);
+        }
         params["vertical"] = json!(self.vertical);
         params["placeholder"] = json!(cx.placeholder_text);
         out.push(Action::Exec("text.create".into(), params));
@@ -850,10 +866,25 @@ impl Tool for TypeTool {
     fn overlays(&self, cx: &ToolContext) -> Vec<Overlay> {
         let mut o = self.snap.guides().to_vec();
         if let (Some((_, s)), Some(d)) = (self.press, self.drag) {
-            let r = Rect::from_points(s, d);
-            o.push(Overlay::Marquee(r));
+            // The area being drawn (along the Constrain Angle's axes when one is set, as `on_up`
+            // makes it) and its size.
+            let size = match vectorcraft_geom::constrain_axes(cx.constrain_angle) {
+                None => {
+                    let r = Rect::from_points(s, d);
+                    o.push(Overlay::Marquee(r));
+                    r.size()
+                }
+                Some(axes) => {
+                    let back = axes.inverse();
+                    let r = Rect::from_points(back * s, back * d);
+                    let mut path = r.to_path(0.1);
+                    path.apply_affine(axes);
+                    o.push(Overlay::Path { path, color: [79, 128, 255], width: 1.0, dashed: true });
+                    r.size()
+                }
+            };
             if cx.measurement_labels {
-                o.push(Overlay::Measure { p: d, text: cx.size_label(r.width(), r.height()) });
+                o.push(Overlay::Measure { p: d, text: cx.size_label(size.width, size.height) });
             }
         }
         // Overflow markers on selected text.

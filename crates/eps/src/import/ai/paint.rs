@@ -127,7 +127,7 @@ impl GradientDef {
         let name = vals.iter().find_map(|v| if let V::Str(_) = v { v.text() } else { None })?;
         let nums: Vec<f64> = vals.iter().filter_map(V::num).collect();
         let kind = if nums.first().copied() == Some(1.0) { GradientKind::Radial } else { GradientKind::Linear };
-        Some(Self { name, gradient: Gradient { kind, stops: vec![] } })
+        Some(Self { name, gradient: Gradient::new(kind, vec![]) })
     }
 
     /// A stop (`Bs`).

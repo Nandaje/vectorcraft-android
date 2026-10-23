@@ -1,5 +1,6 @@
 # Development
 
+> **Last updated:** 2026-10-21 · **Change:** the interface faces as vectorcraft-ui-egui's `interface-fonts` feature, and `theme::install_fonts` for an embedder that draws the panels itself.
 > **Last updated:** 2026-10-21 · **Change:** leaving out the bundled fonts with the egui panels (vectorcraft-ui-egui's and vectorcraft-mcp's `bundled-fonts` features).
 > **Last updated:** 2026-10-14 · **Change:** leaving out the bundled fonts (`bundled-fonts` feature).
 > **Last updated:** 2026-10-14 · **Change:** document-font registration for all explicitly supplied faces.
@@ -171,8 +172,17 @@ and text has no glyphs until a font is added.
 An embedder that also hosts the egui panels depends on `vectorcraft-ui-egui` with
 `default-features = false` as well: its own `bundled-fonts` feature, on by default, turns the
 engine's on; `vectorcraft-mcp` has the same feature. The panels' interface faces (Source Sans 3
-Regular and Semibold, Inter Regular and SemiBold, JetBrains Mono) are separate copies in
-`theme.rs` and stay either way.
+Regular and Semibold, Inter Regular and SemiBold, JetBrains Mono, about 2 MB: `theme.rs`) are
+`vectorcraft-ui-egui`'s `interface-fonts` feature, also on by default; without it the panels draw in
+egui's built-in fonts, which lack some symbols they show (→ ▾ ● ✓), so such an embedder adds a
+font that has them to each of the families below (`ctx.add_font` with an `InsertFontFamily` per
+family).
+
+The panels and dialogs draw in their own egui families (`theme::FONT_UI`, `FONT_UI_SEMIBOLD`,
+`FONT_MONO`), and egui panics drawing text in a family no font is bound to. `VectorcraftApp::logic`
+binds them on its first frame; an embedder that draws the panels or dialogs without it calls
+`theme::install_fonts` once on its context, with or without `interface-fonts`. It replaces the
+context's font definitions, so the embedder's own fonts are added after it.
 
 - The workspace declares `vectorcraft-text` and `vectorcraft-engine` without default features, so
   each crate that wants the fonts asks for them (the apps, and `vectorcraft-testkit` for tests);
@@ -184,7 +194,10 @@ Regular and Semibold, Inter Regular and SemiBold, JetBrains Mono) are separate c
   vectorcraft-text`, and the same for `vectorcraft-mcp`), and with them do; a test of either can't
   see that configuration, since their dev-dependencies turn the fonts on.
 - `cargo test -p vectorcraft-text --no-default-features --test without_bundled_fonts` checks the
-  configuration without them.
+  configuration without them, and `cargo test -p vectorcraft-ui-egui --no-default-features --test
+  install_fonts` that the panels without their interface faces still bind every family; the same
+  step lints `vectorcraft-ui-egui` without its default features. Of the crate's other tests, those
+  about the interface faces need them.
 
 ### Arabic fonts and the web build
 
@@ -442,6 +455,7 @@ Scores and hour estimates are unchanged.
 
 | Date | Change | Summary |
 |---|---|---|
+| 2026-10-21 | minor | Fonts › Leaving out the bundled fonts: vectorcraft-ui-egui's `interface-fonts` feature, and `theme::install_fonts` for an embedder that draws the panels without `VectorcraftApp::logic`. |
 | 2026-10-21 | minor | M3: highlighted-text Eyedropper sampling preserves ranges and rejects unsupported source/target transparency atomically; regression-tested; scores and estimates unchanged. |
 | 2026-10-21 | minor | Fonts › Leaving out the bundled fonts: vectorcraft-ui-egui's and vectorcraft-mcp's `bundled-fonts` features, and the engine declared without default features. |
 | 2026-10-14 | minor | Document the `bundled-fonts` feature of vectorcraft-text and vectorcraft-engine (Fonts › Leaving out the bundled fonts). |

@@ -287,6 +287,153 @@ fn stacked_transform_copies_stay_within_the_image_budget() {
     assert_eq!(count(&evaluate_container(&g).unwrap()), 1001);
 }
 
+/// What `effects` make of `path` within `budget`.
+fn within(effects: &[Effect], path: &PathData, budget: Budget) -> PathData {
+    apply_geometry_within(effects, path, path.bounds().unwrap(), &GeomContext::default(), budget)
+}
+
+/// What `effects` make of `path` within a budget of `max` anchors (and any number of lines).
+fn anchors_within(effects: &[Effect], path: &PathData, max: usize) -> PathData {
+    within(effects, path, Budget { anchors: max, lines: usize::MAX })
+}
+
+/// #3578: stacked Roughens multiply their points (up to 2000 a segment); the anchors they make
+/// stay within the budget, each Roughen spacing its points further apart where it must.
+#[test]
+fn stacked_roughens_stay_within_the_anchor_budget() {
+    let rough = fx("distort.roughen", json!({"size": 10000, "relative": false, "detail": 100}));
+    let outs: Vec<PathData> = (1..=3).map(|n| anchors_within(&vec![rough.clone(); n], &square(), 10_000)).collect();
+    let counts: Vec<usize> = outs.iter().map(PathData::anchor_count).collect();
+    // 100 pt sides at 100 points per inch: 139 points each, within the budget.
+    assert_eq!(counts[0], 4 * 139);
+    assert_eq!(outs[0], run("distort.roughen", rough.params.clone(), &square()));
+    assert!(counts[1..].iter().all(|&c| c > 5_000 && c <= 10_000), "{counts:?}");
+    // The third Roughen still roughens, with its points spaced to fit.
+    assert_ne!(outs[2], outs[1]);
+    assert!(outs.iter().all(all_finite));
+}
+
+/// #3578: stacked Zig Zags multiply their points (up to 101 a segment); each segment gets as many
+/// ridges as fit the budget.
+#[test]
+fn stacked_zig_zags_stay_within_the_anchor_budget() {
+    let zig = fx("distort.zigZag", json!({"ridges": 100, "points": "corner"}));
+    let counts: Vec<usize> = (1..=3).map(|n| anchors_within(&vec![zig.clone(); n], &square(), 10_000).anchor_count()).collect();
+    // 4 × 101 points; then 23 ridges a segment fit (404 × 24); then none, each point displaced.
+    assert_eq!(counts, [404, 9_696, 9_696]);
+    let twice = anchors_within(&vec![zig.clone(); 2], &square(), 10_000);
+    assert_ne!(anchors_within(&vec![zig.clone(); 3], &square(), 10_000), twice);
+    // An open path's end point counts as well.
+    let line = PathData::single(SubPath::polyline(&[Point::new(0.0, 0.0), Point::new(100.0, 0.0)], false));
+    assert_eq!(anchors_within(&[zig], &line, 30).anchor_count(), 30, "the start, 28 ridges and the end");
+}
+
+/// #3578: every effect that multiplies anchors builds within the budget, stacked or not, and one
+/// that doesn't (Round Corners doubles them) is left out where it would pass it.
+#[test]
+fn stacked_geometry_effects_stay_within_the_anchor_budget() {
+    let star = shapes::star(Point::new(150.0, 100.0), 70.0, 32.0, 5, 0.0);
+    for (id, params) in [
+        ("distort.roughen", json!({"size": 50, "detail": 100})),
+        ("distort.zigZag", json!({"ridges": 100, "size": 30})),
+        ("distort.twist", json!({"angle": 3600})),
+        ("distort.freeDistort", json!({"corners": [[0.3, -2], [1, 0], [4, 1], [0, 3]]})),
+        ("warp.twist", json!({"bend": 100})),
+        ("distort.transform", json!({"copies": 1000, "moveH": 1})),
+    ] {
+        for n in 1..=4 {
+            let out = anchors_within(&vec![fx(id, params.clone()); n], &star, 2_000);
+            assert!(out.anchor_count() <= 2_000 && all_finite(&out), "{id} × {n}: {}", out.anchor_count());
+        }
+    }
+    let zig = fx("distort.zigZag", json!({"ridges": 100, "points": "corner"}));
+    let full = anchors_within(&[zig.clone(), zig.clone()], &square(), 10_000);
+    let round = fx("stylize.roundCorners", json!({"radius": 1}));
+    assert_eq!(anchors_within(&[zig.clone(), zig.clone(), round.clone()], &square(), 10_000), full);
+    assert_ne!(anchors_within(&[zig, round], &square(), 10_000), run("distort.zigZag", json!({"ridges": 100, "points": "corner"}), &square()));
+}
+
+/// #3578: a path with more anchors than the budget keeps its count as its budget: effects that
+/// add none apply, and the others add none.
+#[test]
+fn a_path_past_the_anchor_budget_still_takes_effects() {
+    let star = shapes::star(Point::new(150.0, 100.0), 70.0, 32.0, 25, 0.0);
+    let n = star.anchor_count();
+    for (id, params) in [
+        ("distort.tweak", json!({})),
+        ("distort.roughen", json!({"detail": 100})),
+        ("distort.zigZag", json!({"ridges": 100})),
+        ("distort.twist", json!({"angle": 90})),
+    ] {
+        let out = anchors_within(&[fx(id, params)], &star, 10);
+        assert_eq!(out.anchor_count(), n, "{id}");
+        assert_ne!(out, star, "{id}");
+    }
+}
+
+/// #3578: the effects on type, symbols and images reshape all their paths within one budget.
+#[test]
+fn stacked_effects_on_art_stay_within_the_anchor_budget() {
+    use std::sync::Arc;
+
+    use vectorcraft_doc::NodeId;
+    let id = NodeId(9);
+    let leaf = |x: f64| Arc::new(Node::path(id, shapes::rectangle(Rect::new(x, 0.0, x + 100.0, 100.0)), Appearance::default()));
+    let mut art = Node::group(id, (0..10).map(|k| leaf(k as f64 * 120.0)).collect());
+    let rough = fx("distort.roughen", json!({"size": 50, "detail": 100}));
+    crate::reshape::reshape_leaves_within(&mut art, &[&rough, &rough, &rough], Budget { anchors: 5_000, lines: usize::MAX });
+    let mut total = 0;
+    let mut reshaped = 0;
+    for c in art.children().into_iter().flatten() {
+        let path = c.path_data().unwrap();
+        total += path.anchor_count();
+        reshaped += usize::from(path.anchor_count() > 4);
+    }
+    // One Roughen alone makes 10 × 556: the budget binds, and goes to the paths in turn.
+    assert!(total > 4_000 && total <= 5_000, "{total}");
+    assert_eq!(reshaped, 10);
+}
+
+/// #3578: a large Roughen draws each of its points as many lines; they stay within the budget,
+/// the Roughen built again with fewer points where they wouldn't.
+#[test]
+fn large_roughens_stay_within_the_line_budget() {
+    let rough = fx("distort.roughen", json!({"size": 10000, "relative": false, "detail": 100}));
+    let budget = Budget { anchors: 100_000, lines: 200_000 };
+    let once = within(std::slice::from_ref(&rough), &square(), budget);
+    assert_eq!(once, run("distort.roughen", rough.params.clone(), &square()), "within both budgets");
+    let twice = within(&[rough.clone(), rough], &square(), budget);
+    let cost = Budget::of(&twice);
+    assert!(budget.fits(cost) && cost.lines > 100_000, "{cost:?}");
+    assert!(cost.anchors < 10_000 && twice != once, "the second Roughen with fewer points: {cost:?}");
+    // Art of small curves draws its anchors as a few lines each: the anchors bind first.
+    let zig = fx("distort.zigZag", json!({"ridges": 100, "size": 2}));
+    let out = within(&[zig.clone(), zig], &square(), Budget { anchors: 10_000, lines: 100_000 });
+    assert!(out.anchor_count() > 9_000 && util::line_estimate(&out) < 50_000, "{}", util::line_estimate(&out));
+}
+
+/// Straight segments are one line each, and a curve as many as Wang's formula takes at 0.25 px.
+#[test]
+fn line_estimate_counts_the_lines_a_path_is_drawn_with() {
+    assert_eq!(util::line_estimate(&square()), 4);
+    let circle = shapes::ellipse(Rect::new(0.0, 0.0, 100.0, 100.0));
+    assert_eq!(util::line_estimate(&circle), 4 * 9, "a quarter circle of 50 pt in 9 lines");
+    let big = shapes::ellipse(Rect::new(0.0, 0.0, 10_000.0, 10_000.0));
+    assert_eq!(util::line_estimate(&big), 4 * 84, "100 times as large: about 10 times the lines");
+}
+
+/// #3578: the issue's input, a large rectangle with three max-detail Roughens of the largest
+/// size, at the real budgets: two million anchors of it were 141 million lines to draw.
+#[test]
+fn three_max_detail_roughens_stay_within_the_effect_budget() {
+    let rough = fx("distort.roughen", json!({"size": 10000, "relative": false, "detail": 100}));
+    let rect = shapes::rectangle(Rect::new(0.0, 0.0, 1000.0, 1000.0));
+    let out = apply_geometry(&vec![rough.clone(); 3], &rect, rect.bounds().unwrap());
+    let cost = Budget::of(&out);
+    assert!(Budget::EFFECTS.fits(cost) && cost.lines > MAX_EFFECT_LINES / 2, "{cost:?}");
+    assert_ne!(out, apply_geometry(&[rough], &rect, rect.bounds().unwrap()), "more than one Roughen applies");
+}
+
 #[test]
 fn transform_copies_stop_before_they_overflow() {
     let out = run("distort.transform", json!({"scaleH": 100000, "scaleV": 100000, "copies": 1000}), &square());

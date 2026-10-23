@@ -64,8 +64,8 @@ use std::sync::Arc;
 use vectorcraft_color::cms::Cms;
 use vectorcraft_color::{BlendMode, Color, Gradient, GradientKind, GradientPaint, Paint};
 use vectorcraft_doc::{
-    AppearanceItem, AreaOptions, CharPosition, CharStyle, Document, FillLayer, ImageObject, Justify, LAYER_COLORS, LayerColor, LineCap, LineJoin,
-    Node, NodeKind, ParaDirection, ParaStyle, PathEffect, StrokeLayer, TextKind, TextObject,
+    AppearanceItem, AreaOptions, CharPosition, CharStyle, Document, FillLayer, ImageBlob, Justify, LAYER_COLORS, LayerColor, LineCap, LineJoin, Node,
+    NodeKind, ParaDirection, ParaStyle, PathEffect, StrokeLayer, TextKind, TextObject,
 };
 use vectorcraft_effects::stroke;
 use vectorcraft_geom::{Affine, AnchorKind, BezPath, FillRule, PathData, Point, Rect, Shape, SubPath, Vec2};
@@ -678,7 +678,7 @@ impl<'a> Writer<'a> {
             }
             NodeKind::Image(im) => {
                 self.lock(locked);
-                self.image(im);
+                self.image(self.doc.images.get(&im.key), im.width, im.height, im.xf);
             }
             NodeKind::SymbolInstance { symbol, xf } => {
                 self.warn(LIVE);
@@ -1288,6 +1288,16 @@ impl<'a> Writer<'a> {
             n.appearance = vectorcraft_doc::Appearance { items, ..vectorcraft_doc::Appearance::default() }.into();
             self.shape(&n, &path, FillRule::NonZero);
         }
+        // Colour bitmap glyphs (emoji): their images, which the runs' paint doesn't paint.
+        for g in &layout.glyphs {
+            if let Some((image, to_text)) = g.placed_image() {
+                self.image(Some(&image.blob), image.width, image.height, t.xf * to_text);
+            }
+            // COLR glyphs: their layers, as art.
+            if let Some(art) = g.placed_colour(t.xf) {
+                self.node(&art, false);
+            }
+        }
         self.line("U");
     }
 
@@ -1298,14 +1308,14 @@ impl<'a> Writer<'a> {
     /// operands with `XI`, its RGB samples in hex on comment lines of [`HEX_LINE`] digits,
     /// `%AI5_EndRaster`, then `F`. §8.4's examples have no `F`; without it, an app reading the file
     /// can leave out an image in a clipping group and the art after it. No path is open there, so
-    /// the `F` paints nothing.
-    fn image(&mut self, im: &ImageObject) {
+    /// the `F` paints nothing. `blob` holds the pixels, placed as a grid of `width` × `height`
+    /// by `xf`.
+    fn image(&mut self, blob: Option<&ImageBlob>, width: u32, height: u32, xf: Affine) {
         let flip = Affine::new([1.0, 0.0, 0.0, -1.0, 0.0, 0.0]);
-        let m = self.to_art * im.xf * flip;
+        let m = self.to_art * xf * flip;
         if !invertible(m) {
             return;
         }
-        let blob = self.doc.images.get(&im.key);
         if blob.is_some_and(|b| b.bytes.is_empty()) {
             self.warn(LARGE_IMAGE);
             return;
@@ -1320,8 +1330,8 @@ impl<'a> Writer<'a> {
             return;
         }
         // The object places the image's own pixel grid (its width × height) wherever the file's is.
-        let fit = Affine::scale_non_uniform(f64::from(im.width.max(1)) / f64::from(w), f64::from(im.height.max(1)) / f64::from(h));
-        let m = self.to_art * im.xf * fit * flip;
+        let fit = Affine::scale_non_uniform(f64::from(width.max(1)) / f64::from(w), f64::from(height.max(1)) / f64::from(h));
+        let m = self.to_art * xf * fit * flip;
         let rgba = img.to_rgba8();
         let mut hex = String::with_capacity(rgba.len() / 4 * 7);
         hex.push('%');

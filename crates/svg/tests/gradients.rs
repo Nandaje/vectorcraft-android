@@ -9,10 +9,7 @@ use vectorcraft_geom::{Point, Rect, shapes};
 use vectorcraft_svg::{ExportOptions, export, import};
 
 fn black_to_white() -> GradientPaint {
-    GradientPaint::new(Gradient {
-        kind: GradientKind::Linear,
-        stops: vec![GradientStop::new(0.0, Color::BLACK), GradientStop::new(1.0, Color::WHITE)],
-    })
+    GradientPaint::new(Gradient::new(GradientKind::Linear, vec![GradientStop::new(0.0, Color::BLACK), GradientStop::new(1.0, Color::WHITE)]))
 }
 
 fn doc_with(nodes: impl FnOnce(&mut Document) -> Vec<Node>) -> Document {

@@ -256,7 +256,15 @@ fn cmd_ci() -> Result<(), String> {
                 run(c, "cargo test -p vectorcraft-text --no-default-features --test without_bundled_fonts")?;
                 // The egui panels and the MCP server as such an embedder builds them: nothing turns
                 // the fonts back on.
-                libraries_without_bundled_fonts()
+                libraries_without_bundled_fonts()?;
+                // The panels without their interface faces lint clean and still bind every family
+                // they draw in.
+                let mut c = cargo();
+                c.args(["clippy", "-p", "vectorcraft-ui-egui", "--no-default-features", "--all-targets", "--", "-D", "warnings"]);
+                run(c, "cargo clippy -p vectorcraft-ui-egui --no-default-features --all-targets -- -D warnings")?;
+                let mut c = cargo();
+                c.args(["test", "-p", "vectorcraft-ui-egui", "--no-default-features", "--test", "install_fonts"]);
+                run(c, "cargo test -p vectorcraft-ui-egui --no-default-features --test install_fonts")
             }),
         ),
         ("pdf-deps", Box::new(|| pdf_deps::run(&root()))),

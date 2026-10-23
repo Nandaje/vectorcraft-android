@@ -9,7 +9,7 @@ use std::sync::Arc;
 use kurbo::Shape;
 use vectorcraft_color::{BlendMode, Color, GradientKind, GradientPaint, Paint};
 use vectorcraft_doc::{
-    AppearanceItem, ColorMode, Document, Effect, ImageObject, LineCap, LineJoin, Node, NodeKind, StrokeAlign, StrokeLayer, SymbolBoxes, TextObject,
+    AppearanceItem, ColorMode, Document, Effect, ImageBlob, LineCap, LineJoin, Node, NodeKind, StrokeAlign, StrokeLayer, SymbolBoxes, TextObject,
 };
 use vectorcraft_effects::stroke::{self, WrittenShape};
 use vectorcraft_geom::{Affine, BezPath, FillRule, PathData, Point, Rect, Vec2};
@@ -288,7 +288,7 @@ impl<'a> Scene<'a> {
                 self.shape(n, &bp, *rule);
             }
             NodeKind::Text(t) => self.text(n, t),
-            NodeKind::Image(im) => self.image(im),
+            NodeKind::Image(im) => self.image(&im.key, self.doc.images.get(&im.key), im.width, im.height, im.xf),
             NodeKind::SymbolInstance { symbol, xf } => {
                 if let Some(sym) = self.doc.symbols.iter().find(|s| &s.name == symbol)
                     && self.nest < MAX_NEST
@@ -586,6 +586,15 @@ impl<'a> Scene<'a> {
             let mut bp = BezPath::new();
             for g in layout.glyphs.iter().filter(|g| g.run == i) {
                 bp.extend(g.outline.iter());
+                // Colour bitmap glyphs (emoji): their images, which the run's paint doesn't paint.
+                if let Some((image, to_text)) = g.placed_image() {
+                    let key = format!("\u{0}glyph\u{0}{}", image.blob.content_key());
+                    self.image(&key, Some(&image.blob), image.width, image.height, to_text);
+                }
+                // COLR glyphs: their layers, as art (in text space, as the images).
+                if let Some(art) = g.placed_colour(Affine::IDENTITY) {
+                    self.node(&art, true);
+                }
             }
             if bp.elements().is_empty() {
                 continue;
@@ -840,18 +849,18 @@ impl<'a> Scene<'a> {
         }
     }
 
-    /// A placed image: its pixel grid stretched over its `width` × `height` (each image file
-    /// encoded once).
-    fn image(&mut self, im: &ImageObject) {
-        let place = im.xf * Affine::scale_non_uniform(f64::from(im.width.max(1)), f64::from(im.height.max(1)));
+    /// A placed image (`blob`, cached under `key`): its pixel grid of `width` × `height` placed
+    /// by `xf` (each image file encoded once).
+    fn image(&mut self, key: &str, blob: Option<&ImageBlob>, width: u32, height: u32, xf: Affine) {
+        let place = xf * Affine::scale_non_uniform(f64::from(width.max(1)), f64::from(height.max(1)));
         if !invertible(place) {
             return;
         }
-        let encoded = match self.images.get(&im.key) {
+        let encoded = match self.images.get(key) {
             Some(e) => e.clone(),
             None => {
-                let e = self.decode_image(&im.key).and_then(|img| self.encode_image(img.as_raw(), img.width(), img.height())).map(Arc::new);
-                self.images.insert(im.key.clone(), e.clone());
+                let e = self.decode_image(blob).and_then(|img| self.encode_image(img.as_raw(), img.width(), img.height())).map(Arc::new);
+                self.images.insert(key.to_string(), e.clone());
                 e
             }
         };
@@ -860,9 +869,9 @@ impl<'a> Scene<'a> {
         }
     }
 
-    /// Image `key` as RGBA pixels; `None` (with a warning) when it can't be written.
-    fn decode_image(&mut self, key: &str) -> Option<image::RgbaImage> {
-        let Some(img) = self.doc.images.get(key).and_then(|blob| image::load_from_memory(&blob.bytes).ok()) else {
+    /// Image `blob` as RGBA pixels; `None` (with a warning) when it can't be written.
+    fn decode_image(&mut self, blob: Option<&ImageBlob>) -> Option<image::RgbaImage> {
+        let Some(img) = blob.and_then(|blob| image::load_from_memory(&blob.bytes).ok()) else {
             self.warn(UNDECODED);
             return None;
         };

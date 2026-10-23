@@ -291,12 +291,15 @@ pub struct GradientMesh {
     pub points: Vec<MeshPoint>,
 }
 
-/// One tessellated piece of a mesh (a small quad with a solid colour).
+/// One tessellated piece of a mesh: a small quad, its colour at the centre, and its colour and
+/// opacity at each corner (in `pts` order), which a renderer shades between so neighbouring quads
+/// meet without a step.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MeshQuad {
     pub pts: [Point; 4],
     pub color: Color,
     pub opacity: f32,
+    pub corners: [(Color, f32); 4],
 }
 
 /// Create Gradient Mesh → Appearance.
@@ -464,11 +467,49 @@ fn cumulative_lengths(pts: &[Point]) -> Vec<f64> {
     cum
 }
 
+/// Most pieces [`map_nonlinear`] splits one segment into.
+const MAX_PIECES: usize = 64;
+
+/// How many pieces of about `piece` a segment of length `len` is split into: one to `most`.
+pub fn pieces(len: f64, piece: f64, most: usize) -> usize {
+    ((len / piece).ceil() as usize).clamp(1, most.max(1))
+}
+
+/// The piece length to split segments of lengths `lens` with ([`pieces`], at most `most` each) so
+/// that the pieces past each segment's first number at most `room`: `piece` when they already do,
+/// longer pieces otherwise. A segment of `n` pieces adds `n - 1 ≤ len / piece` points to a path,
+/// so pieces of the total length over `room` fit; with no room every segment stays one piece.
+pub fn fit_piece(lens: &[f64], piece: f64, most: usize, room: usize) -> f64 {
+    let added = lens.iter().map(|&len| pieces(len, piece, most) - 1).fold(0, usize::saturating_add);
+    if added <= room {
+        return piece;
+    }
+    if room == 0 {
+        return f64::INFINITY;
+    }
+    // A NaN length is always one piece.
+    piece.max(lens.iter().filter(|len| !len.is_nan()).sum::<f64>() / room as f64)
+}
+
 /// Map every point of `path` through the non-linear function `f`. Segments are split into pieces
 /// no longer than about `max_piece` (up to 64 per segment) and their control points mapped, which
 /// approximates the image curve to O(h²). Closedness and subpath structure are preserved.
 pub fn map_nonlinear(path: &PathData, max_piece: f64, f: impl Fn(Point) -> Point) -> PathData {
-    let max_piece = max_piece.max(1e-3);
+    map_nonlinear_within(path, max_piece, usize::MAX, f)
+}
+
+/// [`map_nonlinear`] whose result has at most `max` anchors, or `path`'s count when that is more:
+/// where pieces of `max_piece` would make more, the pieces grow until they don't ([`fit_piece`]),
+/// a coarser approximation of the image curve. Geometry effects map within their anchor budget.
+pub fn map_nonlinear_within(path: &PathData, max_piece: f64, max: usize, f: impl Fn(Point) -> Point) -> PathData {
+    let mut max_piece = max_piece.max(1e-3);
+    // Each segment adds one anchor per piece past its first.
+    let room = max.saturating_sub(path.anchor_count());
+    let segs = path.subpaths.iter().map(SubPath::segment_count).fold(0, usize::saturating_add);
+    if segs.saturating_mul(MAX_PIECES - 1) > room {
+        let lens: Vec<f64> = path.subpaths.iter().flat_map(|sp| (0..sp.segment_count()).map(|i| poly_len(&seg_cubic(sp, i)))).collect();
+        max_piece = fit_piece(&lens, max_piece, MAX_PIECES, room);
+    }
     let mut subs = Vec::with_capacity(path.subpaths.len());
     for sp in &path.subpaths {
         let n = sp.anchors.len();
@@ -484,7 +525,7 @@ pub fn map_nonlinear(path: &PathData, max_piece: f64, f: impl Fn(Point) -> Point
             res.push(Anchor { p: f(a.p), h_in, h_out: f(a.h_out), kind: a.kind });
             if i < segs {
                 let c = seg_cubic(sp, i);
-                let k = ((poly_len(&c) / max_piece).ceil() as usize).clamp(1, 64);
+                let k = pieces(poly_len(&c), max_piece, MAX_PIECES);
                 for j in 0..k {
                     let sub = c.subsegment((j as f64 / k as f64)..((j + 1) as f64 / k as f64));
                     if let Some(last) = res.last_mut() {
@@ -832,7 +873,7 @@ impl GradientMesh {
         (Color::rgb(rgb[0], rgb[1], rgb[2]), op)
     }
 
-    /// Tessellate into `n`×`n` quads per patch, each coloured at its centre.
+    /// Tessellate into `n`×`n` quads per patch, each coloured at its centre and its corners.
     pub fn quads(&self, n: usize) -> Vec<MeshQuad> {
         if !self.is_valid() {
             return vec![];
@@ -840,18 +881,27 @@ impl GradientMesh {
         let n = n.clamp(1, 64);
         let mut out = Vec::with_capacity(self.rows as usize * self.cols as usize * n * n);
         let mut grid = vec![Point::ZERO; (n + 1) * (n + 1)];
+        let mut colors = vec![(Color::default(), 0.0f32); (n + 1) * (n + 1)];
         for r in 0..self.rows as usize {
             for c in 0..self.cols as usize {
                 for j in 0..=n {
                     for i in 0..=n {
-                        grid[j * (n + 1) + i] = self.eval(r, c, i as f64 / n as f64, j as f64 / n as f64);
+                        let (u, v) = (i as f64 / n as f64, j as f64 / n as f64);
+                        grid[j * (n + 1) + i] = self.eval(r, c, u, v);
+                        colors[j * (n + 1) + i] = self.color_at(r, c, u, v);
                     }
                 }
                 for j in 0..n {
                     for i in 0..n {
                         let (color, opacity) = self.color_at(r, c, (i as f64 + 0.5) / n as f64, (j as f64 + 0.5) / n as f64);
                         let g = |a: usize, b: usize| grid[b * (n + 1) + a];
-                        out.push(MeshQuad { pts: [g(i, j), g(i + 1, j), g(i + 1, j + 1), g(i, j + 1)], color, opacity });
+                        let k = |a: usize, b: usize| colors[b * (n + 1) + a];
+                        out.push(MeshQuad {
+                            pts: [g(i, j), g(i + 1, j), g(i + 1, j + 1), g(i, j + 1)],
+                            color,
+                            opacity,
+                            corners: [k(i, j), k(i + 1, j), k(i + 1, j + 1), k(i, j + 1)],
+                        });
                     }
                 }
             }
@@ -1870,6 +1920,26 @@ mod tests {
             assert_eq!(blend_ramp(F64Deserializer::<Error>::new(bad)).unwrap(), 0.0);
             assert_eq!(blend_color_shift(F64Deserializer::<Error>::new(bad)).unwrap(), 0.0);
         }
+    }
+
+    /// #3578: a non-linear map within an anchor budget splits its segments into longer pieces,
+    /// down to one a segment, and matches the plain map where the budget leaves room.
+    #[test]
+    fn map_nonlinear_within_keeps_to_its_anchor_budget() {
+        let square = vectorcraft_geom::shapes::rectangle(Rect::new(0.0, 0.0, 100.0, 100.0));
+        let f = |p: Point| Point::new(p.x + (p.y / 10.0).sin(), p.y);
+        let full = map_nonlinear(&square, 1.0, f);
+        assert_eq!(full.anchor_count(), 4 * 64);
+        assert_eq!(map_nonlinear_within(&square, 1.0, 4 * 64, f), full);
+        // Every side takes the same pieces: of 400 / (max - 4) pt, so 12 a side for 50 anchors.
+        for (max, want) in [(0, 4), (4, 4), (5, 4), (50, 4 * 12), (255, 4 * 63)] {
+            assert_eq!(map_nonlinear_within(&square, 1.0, max, f).anchor_count(), want, "{max}");
+        }
+        // Lengths that are not numbers stay one piece; with no room every segment is one piece.
+        assert_eq!(fit_piece(&[f64::NAN, 10.0], 1.0, 64, 5), 2.0);
+        assert_eq!(fit_piece(&[f64::INFINITY, 10.0], 1.0, 64, 0), f64::INFINITY);
+        assert_eq!(pieces(f64::INFINITY, f64::INFINITY, 64), 1);
+        assert_eq!(pieces(10.0, 1.0, 0), 1);
     }
 
     /// #1578: Arc bends in the box's real proportions. In half-width units (y scaled by the

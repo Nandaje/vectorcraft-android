@@ -9,7 +9,7 @@ pub mod clipboard;
 mod colorcmds;
 pub mod colormgmt;
 pub mod colortheme;
-mod create;
+pub(crate) mod create;
 mod css;
 mod cut;
 pub(crate) mod dimension;
@@ -50,16 +50,16 @@ mod object;
 pub(crate) mod objects_on_path;
 mod opacitymask;
 mod overprint;
-mod package;
+pub mod package;
 mod paint;
 mod panelcmds;
 pub mod params;
 mod path;
-mod pathops;
+pub(crate) mod pathops;
 mod patterncmds;
 pub mod pdfcmds;
 pub mod perspgrid;
-pub(crate) mod place;
+pub mod place;
 pub mod plugin;
 pub mod prefscmds;
 pub mod print;
@@ -477,10 +477,12 @@ pub(crate) fn ok() -> Result<Value> {
 }
 
 /// Leaves whose appearance a paint command changes: groups and layers expand to their contents,
-/// and compound paths own their children's appearance.
+/// and compound paths own their children's appearance, so a member stands for its compound path
+/// (#3692), which is listed once.
 pub(crate) fn leaf_targets(s: &Session, ids: &[NodeId]) -> Result<Vec<NodeId>> {
     use vectorcraft_doc::NodeKind;
     let d = &s.doc()?.doc;
+    let compound = |id: NodeId| d.parent_of(id).filter(|p| matches!(d.node(*p).map(|n| &n.kind), Some(NodeKind::Compound { .. })));
     let mut out = vec![];
     for id in ids {
         let Some(n) = d.node(*id) else { continue };
@@ -490,11 +492,13 @@ pub(crate) fn leaf_targets(s: &Session, ids: &[NodeId]) -> Result<Vec<NodeId>> {
                     out.push(c.id)
                 }
             }),
-            _ => out.push(*id),
+            _ => out.push(compound(*id).unwrap_or(*id)),
         }
     }
     let comp: Vec<NodeId> = out.iter().filter(|id| matches!(d.node(**id).map(|n| &n.kind), Some(NodeKind::Compound { .. }))).copied().collect();
     out.retain(|id| !comp.iter().any(|c| d.parent_of(*id) == Some(*c)));
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|id| seen.insert(*id));
     Ok(out)
 }
 

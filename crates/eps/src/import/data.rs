@@ -536,6 +536,7 @@ impl Interp<'_> {
                             break;
                         }
                         Some(b'\r') => {
+                            self.skip_lf(&f);
                             ended = true;
                             break;
                         }
@@ -686,6 +687,25 @@ impl Interp<'_> {
             }
             Stream::Pending(_) => vec![],
         })
+    }
+
+    /// After `readline` consumes CR, consume only an immediately following LF. PostScript
+    /// treats CR/LF as one line ending (PLRM §3.8); raw reads must keep every other byte.
+    /// The preceding `read` has already materialized any pending filter.
+    fn skip_lf(&mut self, f: &Rc<RefCell<Stream>>) {
+        match &mut *f.borrow_mut() {
+            Stream::Current => {
+                if self.lex.rest().first() == Some(&b'\n') {
+                    self.lex.advance(1);
+                }
+            }
+            Stream::Buf { data, pos, .. } => {
+                if data.get(*pos) == Some(&b'\n') {
+                    *pos += 1;
+                }
+            }
+            Stream::Pending(_) => {}
+        }
     }
 
     /// Up to `n` bytes read as hexadecimal digits from `f` (other characters skipped).

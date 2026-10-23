@@ -97,18 +97,18 @@ notarize() {
   fi
 }
 
-# `stapler validate` looks the ticket up in Apple's CloudKit, and a dropped connection there
-# (NSURLErrorDomain -1005, "Error 68") fails it although the staple worked. Retry with a pause; a
-# missing or bad ticket still fails every try.
-validate_stapled() {
+# `stapler staple` and `stapler validate` both fetch the ticket from Apple's CloudKit, and a dropped
+# connection there (NSURLErrorDomain -1005, "Error 68") fails them although notarization worked.
+# Both are idempotent, so retry with a pause; a missing or bad ticket still fails every try.
+stapler_retry() {
   local try
   for try in 1 2 3 4; do
-    xcrun stapler validate "$1" && return 0
+    xcrun stapler "$1" "$2" && return 0
     [ "$try" = 4 ] && break
-    echo "stapler validate failed (try $try of 4); retrying in $((try * 20)) s" >&2
+    echo "stapler $1 failed (try $try of 4); retrying in $((try * 20)) s" >&2
     sleep $((try * 20))
   done
-  echo "error: stapler validate $(basename "$1") failed 4 times" >&2
+  echo "error: stapler $1 $(basename "$2") failed 4 times" >&2
   exit 1
 }
 
@@ -135,8 +135,8 @@ codesign --verify --strict --deep --verbose=2 "$APP"
 if [ "$NOTARIZE" = 1 ]; then
   ditto -c -k --keepParent "$APP" "$WORK/VectorCraft-notarize.zip"
   notarize "$WORK/VectorCraft-notarize.zip"
-  xcrun stapler staple "$APP"
-  validate_stapled "$APP"
+  stapler_retry staple "$APP"
+  stapler_retry validate "$APP"
   spctl --assess --type execute -vvv "$APP"
 fi
 
@@ -185,8 +185,8 @@ fi
 hdiutil_retry detach detach "$MOUNT" >/dev/null
 if [ "$NOTARIZE" = 1 ]; then
   notarize "$DMG"
-  xcrun stapler staple "$DMG"
-  validate_stapled "$DMG"
+  stapler_retry staple "$DMG"
+  stapler_retry validate "$DMG"
   spctl --assess --type open --context context:primary-signature -vvv "$DMG"
 fi
 

@@ -179,7 +179,8 @@ const MESH_RASTER_MAX_PIXELS: usize = 4 << 20;
 
 /// Draw a tessellated gradient mesh as one image: its quads are filled into a pixel buffer of the
 /// mesh's on-screen box by scanline (each pixel takes the quad its centre is in, so neighbouring
-/// quads meet without seams or overlap), and the buffer is drawn through the mesh's outline, which
+/// quads meet without seams or overlap, and is shaded between the quad's corner colours, so the
+/// colour changes smoothly instead of in steps), and the buffer is drawn through the mesh's outline, which
 /// antialiases the outer edge. The outline is grown by half a device pixel ([`grown_outline`]), as
 /// the quads drawn one by one are: a page of meshes laid edge to edge would otherwise show the
 /// background through each shared, antialiased edge. Drawing every quad as a path of its own costs a
@@ -208,9 +209,12 @@ fn draw_mesh_raster(ctx: &mut RenderContext, f: &Frame, m: &GradientMesh, quads:
     let mut filled = vec![false; w * h];
     let to_buffer = Affine::translate((-x0, -y0)) * f.view;
     for q in quads {
-        // A fully transparent quad still claims its pixels, so the edge fill below leaves them clear.
-        let c = if q.opacity > 0.0 { f.ink.color(&q.color, q.opacity * alpha).premultiply().to_rgba8() } else { clear };
-        fill_quad(&mut px, &mut filled, w, h, q.pts.map(|p| to_buffer * p), c);
+        // A fully transparent corner still shades toward clear, so the edge fill below leaves it clear.
+        let corners = q.corners.map(|(color, opacity)| {
+            let c = if opacity > 0.0 { f.ink.color(&color, opacity * alpha).premultiply().to_rgba8() } else { clear };
+            [c.r, c.g, c.b, c.a].map(f32::from)
+        });
+        fill_quad(&mut px, &mut filled, w, h, q.pts.map(|p| to_buffer * p), corners);
     }
     // Twice: the grown edge samples pixels up to about a pixel and a half out from the quads.
     let filled = spread_to_edges(&mut px, filled, w, h);
@@ -280,7 +284,7 @@ fn grown_outline(path: &BezPath, grow: f64) -> BezPath {
 
 /// Fill the pixels of the `w`×`h` buffer whose centres are inside quad `p` (buffer pixels, even-odd
 /// so a twisted quad is filled as drawn) with `c`, and mark them `filled`.
-fn fill_quad(px: &mut [vello_cpu::color::PremulRgba8], filled: &mut [bool], w: usize, h: usize, p: [Point; 4], c: vello_cpu::color::PremulRgba8) {
+fn fill_quad(px: &mut [vello_cpu::color::PremulRgba8], filled: &mut [bool], w: usize, h: usize, p: [Point; 4], c: [[f32; 4]; 4]) {
     if !p.iter().all(|p| p.x.is_finite() && p.y.is_finite()) {
         return;
     }
@@ -304,14 +308,50 @@ fn fill_quad(px: &mut [vello_cpu::color::PremulRgba8], filled: &mut [bool], w: u
             let from = (a - 0.5).ceil().clamp(0.0, w as f64) as usize;
             let to = (b - 0.5).ceil().clamp(0.0, w as f64) as usize;
             let row = y * w;
-            for (d, k) in
-                px.get_mut(row + from..row + to).unwrap_or_default().iter_mut().zip(filled.get_mut(row + from..row + to).unwrap_or_default())
+            for ((x, d), k) in (from..)
+                .zip(px.get_mut(row + from..row + to).unwrap_or_default().iter_mut())
+                .zip(filled.get_mut(row + from..row + to).unwrap_or_default())
             {
-                *d = c;
+                *d = shade(p, &c, Point::new(x as f64 + 0.5, yc));
                 *k = true;
             }
         }
     }
+}
+
+/// The colour at `q` in quad `p` with corner colours `c` (premultiplied, 0–255): the corners'
+/// colours mixed by `q`'s barycentric weights in the quad's triangle 0-1-2 or 0-2-3, whichever
+/// holds it. A tessellated quad is a few pixels across, so the split along its diagonal doesn't show.
+fn shade(p: [Point; 4], c: &[[f32; 4]; 4], q: Point) -> vello_cpu::color::PremulRgba8 {
+    let weights = |a: Point, b: Point, d: Point| -> Option<[f64; 3]> {
+        let det = (b.x - a.x) * (d.y - a.y) - (d.x - a.x) * (b.y - a.y);
+        if det.abs() < 1e-12 {
+            return None;
+        }
+        let wb = ((q.x - a.x) * (d.y - a.y) - (d.x - a.x) * (q.y - a.y)) / det;
+        let wd = ((b.x - a.x) * (q.y - a.y) - (q.x - a.x) * (b.y - a.y)) / det;
+        Some([1.0 - wb - wd, wb, wd])
+    };
+    let inside = |w: &[f64; 3]| w.iter().all(|w| *w >= -1e-6);
+    let first = weights(p[0], p[1], p[2]).map(|w| (w, [0, 1, 2]));
+    let second = weights(p[0], p[2], p[3]).map(|w| (w, [0, 2, 3]));
+    // The triangle holding `q`, else (at the quad's edge, or a folded quad) the nearer one.
+    let pick = match (first, second) {
+        (Some(a), _) if inside(&a.0) => Some(a),
+        (_, Some(b)) if inside(&b.0) => Some(b),
+        (Some(a), Some(b)) => Some(if a.0.iter().fold(0.0f64, |m, w| m.min(*w)) >= b.0.iter().fold(0.0f64, |m, w| m.min(*w)) { a } else { b }),
+        (a, b) => a.or(b),
+    };
+    let mix = match pick {
+        Some((w, idx)) => {
+            let w = w.map(|w| w.clamp(0.0, 1.0));
+            let sum = w.iter().sum::<f64>().max(1e-12);
+            std::array::from_fn(|ch| (0..3).map(|k| c[idx[k]][ch] * (w[k] / sum) as f32).sum::<f32>())
+        }
+        None => std::array::from_fn(|ch| c.iter().map(|corner| corner[ch]).sum::<f32>() / 4.0),
+    };
+    let [r, g, b, a] = mix.map(|v| v.round().clamp(0.0, 255.0) as u8);
+    vello_cpu::color::PremulRgba8 { r: r.min(a), g: g.min(a), b: b.min(a), a }
 }
 
 /// Give each pixel no quad covered the colour of a covered neighbour: the outline's antialiased
@@ -555,12 +595,36 @@ mod tests {
         assert!(holes < 60, "{holes} pixels the smooth render covers are empty with hard edges");
     }
 
+    /// A quad is shaded between its corner colours: across a quad running from black on the left to
+    /// white on the right, each column is lighter than the one before (no flat step), the left and
+    /// right edges are near their corners' colours, and a column's pixels are alike.
+    #[test]
+    fn a_quad_shades_smoothly_between_its_corner_colours() {
+        let (w, h) = (40, 10);
+        let clear = vello_cpu::color::PremulRgba8 { r: 0, g: 0, b: 0, a: 0 };
+        let mut px = vec![clear; w * h];
+        let mut filled = vec![false; w * h];
+        let (black, white) = ([0.0, 0.0, 0.0, 255.0], [255.0, 255.0, 255.0, 255.0]);
+        let pts = [Point::new(0.0, 0.0), Point::new(40.0, 0.0), Point::new(40.0, 10.0), Point::new(0.0, 10.0)];
+        fill_quad(&mut px, &mut filled, w, h, pts, [black, white, white, black]);
+        let at = |x: usize, y: usize| px[y * w + x].r;
+        for y in 0..h {
+            for x in 1..w {
+                assert!(at(x, y) > at(x - 1, y), "column {x} row {y}: {} after {}", at(x, y), at(x - 1, y));
+            }
+            assert!(at(0, y) < 8 && at(w - 1, y) > 247, "row {y}: {} to {}", at(0, y), at(w - 1, y));
+        }
+        for x in 0..w {
+            assert!(at(x, 0).abs_diff(at(x, h - 1)) <= 1, "column {x}: {} vs {}", at(x, 0), at(x, h - 1));
+        }
+    }
+
     /// Quads that share edges fill every pixel of their union once: no gap, no overlap.
     #[test]
     fn quads_meeting_edge_to_edge_fill_their_union_once() {
         let (w, h) = (20, 20);
         let clear = vello_cpu::color::PremulRgba8 { r: 0, g: 0, b: 0, a: 0 };
-        let red = vello_cpu::color::PremulRgba8 { r: 255, g: 0, b: 0, a: 255 };
+        let red = [[255.0, 0.0, 0.0, 255.0]; 4];
         let mut px = vec![clear; w * h];
         let mut count = vec![0u8; w * h];
         // A 2×2 grid over (2.3, 2.7)–(17.6, 16.2) with an inner corner off the pixel grid.

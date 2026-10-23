@@ -252,6 +252,11 @@ pub struct ToolContext<'a> {
     /// points (a transform's reference point) land on anchors and ruler guides within
     /// [`Self::snap_tolerance`].
     pub snap_to_point: bool,
+    /// View → Snapping → Snap to Tangent: with Smart Guides on, a line drawn
+    /// from an anchor lands where it touches a nearby curve.
+    pub snap_tangent: bool,
+    /// View → Snapping → Snap to Perpendicular: likewise where it meets a nearby segment square.
+    pub snap_perpendicular: bool,
     /// View → Snap to Glyph: drawn points snap to live-text baselines and glyph bounds (with Smart Guides).
     pub snap_to_glyph: bool,
     /// View → Show Corner Widget: paths show draggable Live Corners widgets in their corners.
@@ -1003,6 +1008,8 @@ pub(crate) mod testutil {
             show_bbox: true,
             snap_to_pixel: false,
             snap_to_point: true,
+            snap_tangent: true,
+            snap_perpendicular: true,
             snap_to_glyph: false,
             corner_widgets: true,
             fill_active: true,
