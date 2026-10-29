@@ -139,23 +139,16 @@ fn the_system_title_bar_preference_keeps_the_window_decorations() {
     let on = ui_state_with_prefs(serde_json::json!({"systemTitleBar": true}));
     assert!(super::opted_into_system_title_bar(Some(&on)));
 
-    // The suite-wide mapping (Frame + preference -> whether VectorCraft draws its own title
-    // bar). The desktop frame (macOS, Windows, X11, KDE/Wayland, …) always keeps native
-    // decorations; the app frame (GNOME/Wayland, or a `VECTORCRAFT_TITLEBAR` override) draws
-    // our own title bar — unless the user opted into the system title bar, which forces the
-    // native frame back on.
     let app = Frame::App(Layout::default());
     let desktop = Frame::Desktop;
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
     {
         assert!(super::custom_titlebar_from(&app, false), "GNOME/Wayland: VectorCraft draws its own");
         assert!(!super::custom_titlebar_from(&app, true), "System Title Bar preference forces native");
         assert!(!super::custom_titlebar_from(&desktop, false), "KDE/X11/…: keep the compositor's frame");
         assert!(!super::custom_titlebar_from(&desktop, true));
     }
-    // macOS and Windows keep today's behavior, independent of the probed frame: the pref still
-    // forces the native frame back on where a custom one would otherwise be drawn.
-    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    #[cfg(any(target_os = "macos", target_os = "windows", target_os = "android"))]
     {
         assert_eq!(super::custom_titlebar_from(&desktop, false), super::CUSTOM_TITLEBAR);
         assert_eq!(super::custom_titlebar_from(&app, false), super::CUSTOM_TITLEBAR, "the probe does not change macOS/Windows");

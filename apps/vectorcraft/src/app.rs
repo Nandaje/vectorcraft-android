@@ -1,5 +1,7 @@
+#[cfg(target_os = "android")]
+use super::android;
 use super::prefs::save_prefs;
-#[cfg(all(windows, not(target_vendor = "win7")))]
+#[cfg(windows)]
 use super::windows_stylus;
 use super::{App, VectorcraftApp, file_access, window};
 
@@ -60,6 +62,8 @@ impl eframe::App for App {
             self.app.titlebar_inset = inset.unwrap_or(mac_window::DEFAULT_INSET);
         }
         file_access::unconfined(|| self.app.ui(ui));
+        #[cfg(target_os = "android")]
+        file_access::unconfined(|| android::show_picker_ui(ui.ctx(), self.app.file_dialog_open()));
         // Preferences are written when confirmed, not only at exit: a session ended any other way
         // (the system shutting down, the process ended or crashing) used to lose them (#1747).
         if self.app.take_prefs_changed() {

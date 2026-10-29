@@ -132,7 +132,13 @@ pub fn preferred_compositor(pref: Option<&str>, env: Option<PowerPreference>) ->
 /// `igvk64.dll`, #806) crashed the app before its window appeared. DX12 is Windows' own backend,
 /// as in PdfCraft. Elsewhere, `default`.
 pub fn backends(default: Backends, env_set: bool) -> Backends {
-    if cfg!(windows) && !env_set { Backends::DX12 | Backends::GL } else { default }
+    if cfg!(windows) && !env_set {
+        Backends::DX12 | Backends::GL
+    } else if cfg!(target_os = "android") && !env_set {
+        Backends::VULKAN | Backends::GL
+    } else {
+        default
+    }
 }
 
 /// The largest texture side to ask the device for, which bounds the window's surface: the
@@ -834,8 +840,13 @@ fn in_graphics_stack(file: &str) -> bool {
 }
 
 /// The adapter to start again without: the one picked, when the graphics failed while the window
-/// was starting up and it wasn't already left out.
+/// was starting up and it wasn't already left out. Android runs inside an app Zygote process where
+/// `current_exe()` cannot be re-executed, so adapter changes take effect on the next app launch via
+/// [`START_FILE`].
 fn restart_without<'a>(graphics_failed: bool, frames: u64, picked: Option<&'a str>, skip: &[String]) -> Option<&'a str> {
+    if cfg!(target_os = "android") {
+        return None;
+    }
     picked.filter(|p| graphics_failed && frames < STARTUP_FRAMES && !skip.iter().any(|s| s == p))
 }
 

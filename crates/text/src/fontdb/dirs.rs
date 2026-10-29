@@ -151,6 +151,9 @@ pub fn system_font_dirs() -> Vec<PathBuf> {
         #[cfg(windows)]
         dirs.extend(registered_font_files(&dirs));
     } else {
+        if cfg!(target_os = "android") {
+            dirs.extend(["/system/fonts", "/product/fonts"].map(Into::into));
+        }
         dirs.extend(["/usr/share/fonts", "/usr/local/share/fonts"].map(Into::into));
         // The XDG data folders' `fonts` (fontconfig's user folder; Flatpak, Snap, NixOS and Guix
         // list their own data folders), relative paths ignored as the XDG spec says.

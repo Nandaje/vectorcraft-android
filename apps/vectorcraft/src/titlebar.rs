@@ -32,12 +32,12 @@ pub(crate) fn adapter_summary(info: &eframe::wgpu::AdapterInfo) -> String {
 }
 
 /// Windows and Linux: no OS title bar; the app bar is the title bar (`vectorcraft_ui_egui::titlebar`).
-/// macOS keeps its traffic lights over the integrated title strip.
+/// macOS keeps its traffic lights over the integrated title strip; Android runs full-screen under `NativeActivity`.
 ///
-/// Used on macOS and Windows (where VectorCraft keeps today's frame regardless of the
+/// Used on macOS, Windows and Android (where VectorCraft keeps today's frame regardless of the
 /// `craft-window` probe) and by the tests; Linux and the BSDs take the decision from the probe.
-#[cfg_attr(not(any(target_os = "macos", target_os = "windows")), allow(dead_code))]
-pub(crate) const CUSTOM_TITLEBAR: bool = !cfg!(target_os = "macos");
+#[cfg_attr(not(any(target_os = "macos", target_os = "windows", target_os = "android")), allow(dead_code))]
+pub(crate) const CUSTOM_TITLEBAR: bool = !cfg!(any(target_os = "macos", target_os = "android"));
 
 /// Whether the user asked for the system title bar in Preferences › User Interface › System Title
 /// Bar. Read from the saved preferences before the window opens; a missing or unreadable value is
@@ -46,31 +46,12 @@ pub(crate) fn opted_into_system_title_bar(saved: Option<&vectorcraft_ui_egui::Ui
     saved.map(|ui| ui.engine_prefs.get("systemTitleBar").and_then(serde_json::Value::as_bool).unwrap_or(false)).unwrap_or(false)
 }
 
-/// Whether this start draws its own title bar, given the frame the shared `craft-window` crate
-/// decided and the user's System Title Bar preference.
-///
-/// The suite-wide rule (`craft_window::Choice`) is: the desktop draws the frame
-/// ([`craft_window::Frame::Desktop`]) on macOS, Windows, X11 and any Wayland compositor with
-/// server-side decorations (KDE, Sway, Hyprland, COSMIC); the app draws it
-/// ([`craft_window::Frame::App`]) only where the compositor leaves it to the app (GNOME's Mutter),
-/// or when `VECTORCRAFT_TITLEBAR` overrides the probe. VectorCraft draws its own title bar exactly
-/// when `craft-window` says the app owns the frame **and** the user has not opted into the system
-/// title bar; the preference always forces the native frame back on.
-///
-/// macOS and Windows keep today's behavior and are decided by [`CUSTOM_TITLEBAR`] rather than the
-/// probe: `craft-window` returns `Frame::Desktop` for both (the OS always draws a frame), but
-/// VectorCraft insets its content under the macOS traffic lights and draws its own caption buttons
-/// on Windows — an overdraw on an OS-decorated window that is VectorCraft's choice, not
-/// `craft-window`'s. Only Linux and the BSDs take the decision from the probe.
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "android")))]
 pub(crate) fn custom_titlebar_from(frame: &craft_window::Frame, opted_into_system: bool) -> bool {
     matches!(frame, craft_window::Frame::App(_)) && !opted_into_system
 }
 
-/// macOS and Windows: today's behavior, independent of the `craft-window` probe (see
-/// [`custom_titlebar_from`]). macOS never draws its own frame (`CUSTOM_TITLEBAR` is `false`);
-/// Windows draws its own caption unless the user opted into the system title bar.
-#[cfg(any(target_os = "macos", target_os = "windows"))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "android"))]
 pub(crate) fn custom_titlebar_from(_frame: &craft_window::Frame, opted_into_system: bool) -> bool {
     CUSTOM_TITLEBAR && !opted_into_system
 }

@@ -167,9 +167,22 @@ fn xdg_documents(text: &str, home: &std::path::Path) -> Option<std::path::PathBu
     (dir.has_root() && dir != home).then_some(dir)
 }
 
-/// The user's home folder (`HOME`, else `USERPROFILE` on Windows; none on the web).
+/// The user's home folder (`HOME`, else `USERPROFILE` on Windows, else shared storage on Android; none on the web).
 fn home_folder() -> Option<String> {
-    std::env::var("HOME").or_else(|_| std::env::var("USERPROFILE")).ok().filter(|h| !h.is_empty())
+    std::env::var("HOME")
+        .or_else(|_| std::env::var("USERPROFILE"))
+        .or_else(|_| {
+            #[cfg(target_os = "android")]
+            {
+                std::env::var("EXTERNAL_STORAGE").or_else(|_| Ok::<String, std::env::VarError>("/storage/emulated/0".into()))
+            }
+            #[cfg(not(target_os = "android"))]
+            {
+                Err(std::env::VarError::NotPresent)
+            }
+        })
+        .ok()
+        .filter(|h| !h.is_empty())
 }
 
 /// Where exports go by default (Export for Screens): the user's Desktop when there is one, else
